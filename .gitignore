@@ -1,0 +1,19 @@
+node_modules/
+dist/
+functions/lib/
+.local/
+.env
+.env.*
+!.env.example
+functions/.secret.local
+test-results/
+playwright-report/
+firebase-debug.log
+firestore-debug.log
+.DS_Store
+.wrangler/
+.dev.vars
+.dev.vars.*
+
+# Nested local checkout, separate from the game source.
+/jihan/

@@ -1,0 +1,29 @@
+{
+  "name": "jihan-games",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "functions"
+  ],
+  "scripts": {
+    "dev": "tsx functions/src/local.ts",
+    "build": "tsc --noEmit && tsc -p worker/tsconfig.json && vite build",
+    "test": "tsx --test tests/*.test.ts",
+    "dev:cloudflare": "wrangler dev",
+    "db:local": "wrangler d1 migrations apply jihan-games-scores --local",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "dependencies": {
+    "phaser": "4.2.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260920.1",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0",
+    "wrangler": "^4.135.0"
+  }
+}
