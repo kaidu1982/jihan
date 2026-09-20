@@ -3,7 +3,7 @@ import { createGame, type RunResult, type StairScene } from './game';
 import { api, type Ranking, type Ticket } from './api';
 import { activeProfile, saved, persist, selectProfile, rememberScore, type Profile } from './storage';
 import { normalizeName, type Action, type Mode } from '../functions/src/shared/rules';
-import { playTone } from './audio';
+import { GameAudio } from './audio';
 
 const icons = {
   star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8-6.2-3.2L5.8 21 7 14.2 2 9.3l6.9-1z"/></svg>',
@@ -20,7 +20,7 @@ const icons = {
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="site-header">
     <a class="brand" href="/" aria-label="지한이의 작은 오락실"><span class="brand-mark">${icons.stairs}</span><span>지한이의 <strong>작은 오락실</strong></span></a>
-    <nav aria-label="게임 메뉴"><button class="icon-button mobile-rank" id="rank-mobile" aria-label="순위표">${icons.cup}</button><button class="icon-button" id="sound-button" aria-label="소리 끄기">${icons.sound}</button><button class="profile-button" id="profile-button">${icons.user}<span id="header-name">플레이어</span></button></nav>
+    <nav aria-label="게임 메뉴"><button class="icon-button mobile-rank" id="rank-mobile" aria-label="순위표">${icons.cup}</button><button class="icon-button" id="sound-button" aria-label="소리 설정" aria-haspopup="dialog">${icons.sound}</button><button class="profile-button" id="profile-button">${icons.user}<span id="header-name">플레이어</span></button></nav>
   </header>
   <main class="layout">
     <aside class="intro-panel">
@@ -53,6 +53,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <aside class="ranking-panel"><div class="ranking-heading"><span class="eyebrow">HALL OF FAME</span><span class="rank-spark">✦</span><h2>구름 위의 친구들</h2><p>가장 높이 올라간 100개의 기록</p></div><div class="ranking-list" id="ranking-preview"></div><button class="all-rankings" id="all-rankings">전체 순위 보기 <span>↗</span></button><div class="practice-note"><span>☁</span><h3>천천히 해도 괜찮아!</h3><p>연습 모드에서는 시간이 흐르지 않아요. 계단을 하나씩 익혀봐요.</p></div><p class="ranking-footnote">도전 모드 · 캐릭터별 최고 점수</p><p class="environment-note" id="environment-note"></p></aside>
   </main>
   <footer class="site-footer"><span>MADE FOR JIHAN, & EVERY LITTLE ADVENTURER.</span><span>즐거움은 한 계단부터 <i>✦</i></span></footer>
+  <dialog id="sound-dialog" aria-labelledby="sound-title"><div class="dialog-header"><div><span class="eyebrow">LITTLE MELODIES</span><h2 id="sound-title">어떤 소리로 놀까요?</h2></div><button class="dialog-close" aria-label="닫기">×</button></div><p class="dialog-description">통통 뛰는 도전, 포근한 연습.<br>모드에 어울리는 구름 음악이 함께해요.</p><div class="sound-options"><label class="sound-option"><span><strong>배경 음악</strong><small>게임에 흐르는 구름 멜로디</small></span><input id="music-toggle" type="checkbox" role="switch" aria-label="배경 음악"></label><label class="sound-option"><span><strong>효과음</strong><small>계단을 오르고 기록을 세우는 소리</small></span><input id="effects-toggle" type="checkbox" role="switch" aria-label="효과음"></label></div><p class="sound-status" id="music-status" role="status"></p><button class="primary-button" id="sound-close">좋아요!</button></dialog>
   <dialog id="ranking-dialog"><div class="dialog-header"><div><span class="eyebrow">TOP 100</span><h2>구름 위의 친구들</h2></div><button class="dialog-close" aria-label="닫기">×</button></div><p class="dialog-description">도전 모드의 캐릭터별 최고 기록이에요.</p><div id="ranking-full" class="ranking-list full-list"></div></dialog>
   <dialog id="profile-dialog"><div class="dialog-header"><div><span class="eyebrow">OUR PLAYERS</span><h2>누가 놀까요?</h2></div><button class="dialog-close" aria-label="닫기">×</button></div><div id="profile-list"></div><button id="new-profile" class="primary-button">새 캐릭터 만들기 +</button><p class="dialog-description">이 기기에 저장된 캐릭터예요. 브라우저 데이터를 지우면 기록에 다시 연결할 수 없어요.</p><button id="delete-profile" class="danger-button">현재 캐릭터와 기록 삭제</button><p id="profile-error" class="field-error" role="alert"></p></dialog>
   <dialog id="help-dialog"><div class="dialog-header"><h2>함께 올라가 볼까요?</h2><button class="dialog-close" aria-label="닫기">×</button></div><div class="help-steps"><p><b>1</b><span><strong>지한이가 보는 방향을 살펴요.</strong>처음에는 오른쪽을 보고 있어요.</span></p><p><b>2</b><span><strong>앞으로 갈 땐 ‘오르기’!</strong>반대쪽 계단이 나오면 ‘방향 바꾸기’를 눌러요. 돌아서면서 한 칸 올라가요.</span></p><p><b>3</b><span><strong>시간이 다 되기 전에 한 계단 더!</strong>올라갈 때마다 시간이 채워져요. 연습 모드에서는 시간 제한도, 추락도 없어요.</span></p></div><button class="primary-button" id="help-close">이제 알겠어요!</button></dialog>
@@ -71,6 +72,7 @@ let leaderboardAvailable = false;
 let toastTimer: ReturnType<typeof setTimeout>;
 let messageTimer: ReturnType<typeof setTimeout>;
 let submissionSequence = 0;
+const sound = new GameAudio({ onStatus: () => updateSound() });
 
 function toast(text: string): void {
   $('#toast').textContent = text; $('#toast').classList.add('visible');
@@ -88,9 +90,11 @@ function updateProfile(): void {
   $('#welcome-title').textContent = profile ? '오늘도 한 계단 더!' : '어떤 이름으로 놀까요?';
 }
 function updateSound(): void {
-  const button = $('#sound-button'); button.innerHTML = saved.sound ? icons.sound : icons.mute;
-  button.setAttribute('aria-label', saved.sound ? '소리 끄기' : '소리 켜기');
-  button.setAttribute('aria-pressed', String(saved.sound));
+  $('#sound-button').innerHTML = saved.sound || saved.music ? icons.sound : icons.mute;
+  $<HTMLInputElement>('#music-toggle').checked = saved.music;
+  $<HTMLInputElement>('#effects-toggle').checked = saved.sound;
+  const labels = { idle: '게임을 시작하면 음악이 함께해요.', loading: '구름 음악을 준비하고 있어요…', playing: '구름 음악이 흐르고 있어요.', paused: '계속 올라가면 음악도 이어져요.', muted: '배경 음악은 쉬고 있어요.', unavailable: '음악을 불러오지 못했어요. 게임은 계속 즐길 수 있어요.' };
+  $('#music-status').textContent = labels[sound.status];
 }
 function setControls(enabled: boolean): void {
   $<HTMLButtonElement>('#turn-button').disabled = !enabled;
@@ -105,6 +109,8 @@ function setScreen(value: typeof screen): void {
   $('#result-overlay').hidden = value !== 'result';
   setControls(value === 'playing');
   $('#game-canvas').classList.toggle('softened', value === 'paused' || value === 'result');
+  if (value === 'paused') sound.pause();
+  else if (value === 'start' || value === 'result') sound.stop();
 }
 function rankList(target: HTMLElement, rows: Ranking[], emptyCopy: string): void {
   target.replaceChildren();
@@ -139,6 +145,7 @@ async function startRun(): Promise<void> {
   if (starting || !scene) return;
   let name: string;
   try { name = normalizeName($<HTMLInputElement>('#player-name').value); } catch (error) { $('#name-error').textContent = (error as Error).message; return; }
+  sound.stop(); sound.unlock(); sound.prepare(mode);
   $('#name-error').textContent = ''; starting = true;
   submissionSequence++;
   document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], #result-home').forEach(button => { button.disabled = true; });
@@ -164,7 +171,8 @@ async function startRun(): Promise<void> {
   $('#start-button').innerHTML = '올라가 볼까? <span>↗</span>';
   $<HTMLButtonElement>('#start-button').disabled = false;
   $<HTMLButtonElement>('#retry-button').disabled = false;
-  playTone('step', saved.sound);
+  sound.playMusic(mode); sound.tone('step');
+  if (document.hidden || !document.hasFocus()) pause();
   message(mode === 'practice' ? '시간 걱정 없이, 천천히 올라가요!' : '오른쪽부터! 오르기를 눌러봐요.');
 }
 async function endRun(result: RunResult): Promise<void> {
@@ -179,7 +187,7 @@ async function endRun(result: RunResult): Promise<void> {
   $('#result-copy').textContent = result.reason === 'wrong' ? '반대쪽 계단에서는 방향을 바꿔봐요!' : result.reason === 'time' ? '한 계단 더! 다시 도전해 볼까요?' : '끝까지 올라왔어요. 정말 대단해요!';
   $('#result-best').textContent = `${result.mode === 'practice' ? profile.practiceBest : profile.best} 계단`;
   $('#save-status').textContent = stored ? (result.mode === 'practice' ? '연습 기록은 이 기기에만 저장해요.' : '이 기기에 기록을 저장했어요.') : '브라우저 저장 공간을 사용할 수 없어요.';
-  playTone(newBest ? 'record' : 'end', saved.sound);
+  sound.tone(newBest ? 'record' : 'end');
   if (result.mode === 'challenge' && runTicket && result.score > 0) {
     $('#save-status').textContent = '순위표에 기록을 확인하고 있어요…';
     try {
@@ -214,7 +222,7 @@ $('#pause-home').addEventListener('click', () => {
   home();
 });
 $('#pause-button').addEventListener('click', pause);
-$('#resume-button').addEventListener('click', () => { scene.setPaused(false); setScreen('playing'); });
+$('#resume-button').addEventListener('click', () => { scene.setPaused(false); setScreen('playing'); sound.resume(); });
 for (const [id, action] of [['#turn-button', 'turn'], ['#climb-button', 'climb']] as const) {
   const button = $(id);
   button.addEventListener('pointerdown', event => { event.preventDefault(); act(action); button.classList.add('pressed'); });
@@ -230,8 +238,18 @@ document.addEventListener('keydown', event => {
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 window.addEventListener('blur', pause);
+window.addEventListener('pagehide', () => { pause(); sound.pause(); });
 window.addEventListener('online', () => void refreshRankings());
-$('#sound-button').addEventListener('click', () => { saved.sound = !saved.sound; persist(); updateSound(); playTone('step', saved.sound); });
+$('#sound-button').addEventListener('click', () => { openDialog('#sound-dialog'); updateSound(); });
+$('#sound-close').addEventListener('click', () => $<HTMLDialogElement>('#sound-dialog').close());
+$('#music-toggle').addEventListener('change', () => {
+  saved.music = $<HTMLInputElement>('#music-toggle').checked; persist();
+  sound.setPreferences(saved.music, saved.sound); sound.unlock(); updateSound();
+});
+$('#effects-toggle').addEventListener('change', () => {
+  saved.sound = $<HTMLInputElement>('#effects-toggle').checked; persist();
+  sound.setPreferences(saved.music, saved.sound); sound.unlock(); updateSound(); sound.tone('step');
+});
 document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => button.addEventListener('click', () => {
   mode = button.dataset.mode as Mode;
   document.querySelectorAll('[data-mode]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
@@ -277,6 +295,7 @@ $('#delete-profile').addEventListener('click', async () => {
   deleteArmed = false; $('#delete-profile').textContent = '현재 캐릭터와 기록 삭제';
 });
 
+sound.setPreferences(saved.music, saved.sound);
 updateProfile(); updateSound(); void refreshRankings();
 createGame($('#game-canvas'), {
   update: (score, energy) => {
@@ -286,7 +305,7 @@ createGame($('#game-canvas'), {
   },
   step: (action, score) => {
     if (score === -1) { message('다음 계단을 보고, 다른 버튼을 눌러봐요!'); return; }
-    playTone('step', saved.sound, score);
+    sound.tone(action === 'turn' ? 'turn' : 'step', score);
     if (score % 10 === 0) message(`${score}계단! 아주 잘하고 있어요 ✦`);
   },
   end: result => void endRun(result),

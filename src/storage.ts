@@ -1,14 +1,14 @@
 import type { Mode } from '../functions/src/shared/rules';
 export type Profile = { id: string; name: string; best: number; practiceBest: number };
-type Saved = { profiles: Profile[]; activeId: string; sound: boolean };
+type Saved = { profiles: Profile[]; activeId: string; sound: boolean; music: boolean };
 const KEY = 'jihan-stairs-v1';
 export function loadSaved(): Saved {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
     const profiles = Array.isArray(saved.profiles) ? saved.profiles.filter((p: Profile) =>
       typeof p.id === 'string' && typeof p.name === 'string' && Number.isFinite(p.best) && Number.isFinite(p.practiceBest)) : [];
-    return { profiles, activeId: saved.activeId || '', sound: saved.sound !== false };
-  } catch { return { profiles: [], activeId: '', sound: true }; }
+    return { profiles, activeId: saved.activeId || '', sound: saved.sound !== false, music: typeof saved.music === 'boolean' ? saved.music : saved.sound !== false };
+  } catch { return { profiles: [], activeId: '', sound: true, music: true }; }
 }
 export const saved = loadSaved();
 export function persist(): boolean {

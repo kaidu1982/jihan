@@ -1,0 +1,24 @@
+[
+  {
+    "file": "cloud-steps-128",
+    "bpm": 128,
+    "bars": 32,
+    "duration": 60.0,
+    "sampleRate": 44100,
+    "peakDbfs": -4.44,
+    "rmsDbfs": -19.0,
+    "loopEdgeDelta": 0.000384,
+    "previewSeconds": 24
+  },
+  {
+    "file": "cloud-steps-104",
+    "bpm": 104,
+    "bars": 32,
+    "duration": 73.84614512471656,
+    "sampleRate": 44100,
+    "peakDbfs": -5.51,
+    "rmsDbfs": -19.0,
+    "loopEdgeDelta": 0.013686,
+    "previewSeconds": 24
+  }
+]
