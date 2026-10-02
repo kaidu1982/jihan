@@ -4,6 +4,9 @@ import { api, type Ranking, type Ticket } from './api';
 import { activeProfile, saved, persist, selectProfile, rememberScore, type Profile } from './storage';
 import { normalizeName, type Action, type Mode } from '../functions/src/shared/rules';
 import { GameAudio } from './audio';
+import { ADVENTURE_STAGES, ACHIEVEMENTS, worldById, type GameMode } from './content';
+import { ProgressStore, createProgressRunId, dailySeed, seoulDateKey } from './progression';
+import { JourneyBook } from './journey';
 
 const icons = {
   star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8-6.2-3.2L5.8 21 7 14.2 2 9.3l6.9-1z"/></svg>',
@@ -24,9 +27,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </header>
   <main class="layout">
     <aside class="intro-panel">
-      <span class="eyebrow"><span class="tiny-star">✦</span> FIRST ADVENTURE</span>
+      <span class="eyebrow"><span class="tiny-star">✦</span> FIVE WORLDS, ONE LITTLE ADVENTURER</span>
       <h1>지한이의<br><span>무한계단</span><i>✦</i></h1>
-      <p class="intro-copy">한 계단, 또 한 계단.<br>우리 어디까지 올라갈까?</p>
+      <p class="intro-copy">구름 초원에서 별빛 우주까지.<br>우리 어디까지 올라갈까?</p>
       <div class="best-card"><span class="best-icon">${icons.cup}</span><div><span class="label">나의 최고 기록</span><strong><span id="personal-best">0</span><small> 계단</small></strong></div></div>
       <div class="how-to"><h2>두 버튼이면 준비 끝!</h2><div><span class="mini-key turn">${icons.turn}</span><p><strong>방향 바꾸기</strong><span>반대로 돌아서 한 계단</span></p></div><div><span class="mini-key climb">${icons.up}</span><p><strong>오르기</strong><span>바라보는 쪽으로 한 계단</span></p></div><p class="keyboard-note">키보드는 <kbd>←</kbd> 방향 바꾸기 · <kbd>→</kbd> 오르기</p></div>
       <button class="text-button" id="help-button">처음이라면? 게임 방법 보기 <span>↗</span></button>
@@ -36,17 +39,18 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <section class="game-column" aria-label="무한계단 게임">
       <div class="game-shell">
         <div id="game-canvas" aria-label="지한이가 구름 위 계단을 오르는 게임 화면"></div>
-        <div class="game-hud" id="hud" hidden><div class="mode-badge" id="mode-badge">도전 모드</div><div class="score-display"><strong id="score">0</strong><span>계단</span></div><button id="pause-button" class="pause-button" aria-label="일시정지">${icons.pause}</button><div class="energy-track" aria-label="남은 시간"><div id="energy-fill"></div></div></div>
+        <div class="game-hud" id="hud" hidden><div class="mode-badge" id="mode-badge">도전 모드</div><div class="score-display"><strong id="score">0</strong><span id="score-unit">계단</span></div><button id="pause-button" class="pause-button" aria-label="일시정지">${icons.pause}</button><div class="energy-track" aria-label="남은 시간"><div id="energy-fill"></div></div><div class="journey-hud"><span id="world-label">구름 초원</span><span id="run-combo">0 연속</span><span id="run-stars">✦ 0</span></div><div id="step-hint" class="step-hint" hidden></div></div>
         <div class="sky-label" id="sky-label"><span>✦</span> 오늘의 모험은 구름 위로</div>
         <div class="start-overlay" id="start-overlay">
           <img class="start-mascot" src="/assets/jihan-climber.png" alt="빨간 운동화를 신고 웃고 있는 지한이" />
-          <div class="start-card"><div class="card-kicker">HELLO, ADVENTURER!</div><h2 id="welcome-title">어떤 이름으로 놀까요?</h2><form id="start-form"><label class="sr-only" for="player-name">캐릭터 이름</label><div class="name-field">${icons.user}<input id="player-name" name="name" maxlength="12" autocomplete="off" placeholder="캐릭터 이름" required><span>✎</span></div><p class="field-error" id="name-error" role="alert"></p><div class="mode-picker" role="group" aria-label="게임 모드"><button type="button" data-mode="challenge" aria-pressed="true"><span>⚡</span> 도전 모드</button><button type="button" data-mode="practice" aria-pressed="false"><span>☁</span> 연습 모드</button></div><p class="mode-description" id="mode-description">시간 안에 올라가며 최고 기록에 도전해요.</p><button class="primary-button start-button" id="start-button" type="submit" disabled>게임 준비 중…</button></form><p class="start-footnote">이름 하나면 준비 끝. 가입 없이 놀아요.</p></div>
+          <div class="start-card"><div class="card-kicker">HELLO, ADVENTURER!</div><h2 id="welcome-title">어떤 이름으로 놀까요?</h2><form id="start-form"><label class="sr-only" for="player-name">캐릭터 이름</label><div class="name-field">${icons.user}<input id="player-name" name="name" maxlength="12" autocomplete="off" placeholder="캐릭터 이름" required><span>✎</span></div><p class="field-error" id="name-error" role="alert"></p><div class="mode-picker" role="group" aria-label="게임 모드"><button type="button" data-mode="challenge" aria-pressed="true"><span>⚡</span> 무한 도전</button><button type="button" data-mode="adventure" aria-pressed="false"><span>🗺️</span> 세계 모험</button><button type="button" data-mode="daily" aria-pressed="false"><span>☀️</span> 오늘의 계단</button><button type="button" data-mode="practice" aria-pressed="false"><span>☁</span> 편안한 연습</button></div><p class="mode-description" id="mode-description">50계단마다 새로운 풍경! 최고 기록에 도전해요.</p><button id="stage-select" class="stage-select" type="button" hidden></button><button class="primary-button start-button" id="start-button" type="submit" disabled>게임 준비 중…</button></form><p class="start-footnote">이름 하나면 준비 끝. 가입 없이 놀아요.</p></div>
         </div>
         <div class="play-message" id="play-message" role="status"></div>
         <div class="pause-overlay" id="pause-overlay" hidden><div class="pause-card"><span class="pause-cloud">☁</span><h2>잠깐 쉬어가요</h2><p>지한이가 여기서 기다리고 있어요.</p><button id="resume-button" class="primary-button">계속 올라가기 <span>↗</span></button><button id="pause-home" class="text-button">처음으로</button></div></div>
-        <div class="result-overlay" id="result-overlay" hidden><div class="result-card"><span class="result-star">${icons.star}</span><p class="card-kicker" id="result-kicker">아주 멋진 도전!</p><h2><span id="result-score">0</span><small>계단</small></h2><p id="result-copy">한 번 더 올라가 볼까요?</p><div class="result-best">나의 최고 <strong id="result-best">0 계단</strong></div><p id="save-status" class="save-status" role="status"></p><button id="retry-button" class="primary-button">한 번 더! <span>↗</span></button><button id="result-home" class="text-button">이름·모드 바꾸기</button></div></div>
+        <div class="result-overlay" id="result-overlay" hidden><div class="result-card"><span class="result-star">${icons.star}</span><p class="card-kicker" id="result-kicker">아주 멋진 도전!</p><h2><span id="result-score">0</span><small>계단</small></h2><p id="result-copy">한 번 더 올라가 볼까요?</p><div id="result-rewards" class="result-rewards"></div><div class="result-best"><span id="result-best-label">나의 최고</span><strong id="result-best">0 계단</strong></div><p id="save-status" class="save-status" role="status"></p><button id="next-stage" class="primary-button" hidden>다음 모험으로 ↗</button><button id="retry-button" class="primary-button">한 번 더! <span>↗</span></button><button id="result-home" class="text-button">이름·모드 바꾸기</button></div></div>
       </div>
       <div class="game-controls"><button id="turn-button" class="control-button turn-control" aria-label="방향 바꾸기" disabled>${icons.turn}<span>방향 바꾸기<small>← 키</small></span></button><button id="climb-button" class="control-button climb-control" aria-label="오르기" disabled>${icons.up}<span>오르기<small>→ 키</small></span></button></div>
+      <div class="journey-launchers"><button id="journey-open"><span class="book-symbol">🗺️</span><span><strong>모험 수첩 <b id="journey-wallet">0 별</b></strong><small id="journey-caption">모험 0/5 · 친구 1/6</small></span><i>↗</i></button><button id="missions-open"><span>✦</span><strong>오늘의 미션</strong><small id="mission-caption">0/3 완료</small></button></div>
       <p class="below-game" id="below-game">내 속도로 즐기고 싶다면, 연습 모드로 시작해요.</p>
     </section>
 
@@ -62,17 +66,31 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 let scene: StairScene;
-let mode: Mode = 'challenge';
+let mode: GameMode = 'challenge';
+let selectedStage = ADVENTURE_STAGES[0].id;
+const progressStore = new ProgressStore();
+let journey: JourneyBook;
+let currentRun: { id: string; mode: GameMode; dateKey: string; stageId?: string; stars: number; awards: string[]; closed: boolean; stored: boolean; world?: string; dailyBestAtStart: number } | undefined;
 let runProfile: Profile | undefined;
 let ticket: Ticket | undefined;
 let screen: 'start' | 'playing' | 'paused' | 'result' = 'start';
 let starting = false;
+let deleting = false;
 let entries: Ranking[] = [];
 let leaderboardAvailable = false;
 let toastTimer: ReturnType<typeof setTimeout>;
 let messageTimer: ReturnType<typeof setTimeout>;
 let submissionSequence = 0;
 const sound = new GameAudio({ onStatus: () => updateSound() });
+const ruleMode = (value: GameMode): Mode => value === 'practice' || value === 'adventure' ? 'practice' : 'challenge';
+const selectedAdventure = () => ADVENTURE_STAGES.find(stage => stage.id === selectedStage)!;
+function ensureProfile(): Profile | undefined {
+  if (activeProfile()) return activeProfile();
+  try {
+    const profile = selectProfile(normalizeName($<HTMLInputElement>('#player-name').value));
+    updateProfile(); return profile;
+  } catch { toast('게임 화면에서 캐릭터 이름을 먼저 정해 주세요.'); return undefined; }
+}
 
 function toast(text: string): void {
   $('#toast').textContent = text; $('#toast').classList.add('visible');
@@ -88,6 +106,46 @@ function updateProfile(): void {
   $('#personal-best').textContent = (mode === 'practice' ? profile?.practiceBest : profile?.best)?.toLocaleString() || '0';
   if (profile) $('#player-name').setAttribute('value', profile.name);
   $('#welcome-title').textContent = profile ? '오늘도 한 계단 더!' : '어떤 이름으로 놀까요?';
+  if (!progressStore.isStageUnlocked(profile?.id || 'preview', selectedStage)) selectedStage = ADVENTURE_STAGES[0].id;
+  updateMode(); journey?.refresh();
+}
+function updateMode(): void {
+  const stage = selectedAdventure();
+  document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === mode)));
+  const descriptions: Record<GameMode, string> = {
+    challenge: '50계단마다 새로운 풍경! 최고 기록에 도전해요.',
+    practice: '시간도 실수도 걱정 없이, 다섯 세상을 둘러봐요.',
+    adventure: '시간 제한 없이 완주해요. 실수 기회는 세 번!',
+    daily: `${seoulDateKey()} · 모두 같은 150계단 · 내 최고 ${progressStore.get(activeProfile()?.id || 'preview').daily.best}`,
+  };
+  $('#mode-description').textContent = descriptions[mode];
+  $('#stage-select').hidden = mode !== 'adventure';
+  $('#stage-select').textContent = `${worldById(stage.worldId).icon} ${stage.title} · ${stage.goal}계단  ›`;
+}
+function chooseMode(value: GameMode, stageId?: string): void {
+  if (starting) return;
+  if (screen !== 'start') home();
+  mode = value;
+  if (stageId) selectedStage = stageId;
+  updateProfile();
+}
+function saveJourney(completed = false): void {
+  if (!currentRun || currentRun.closed || !runProfile || !scene) return;
+  const detail = scene.getProgress();
+  const result = progressStore.record(runProfile.id, {
+    runId: currentRun.id, mode: currentRun.mode, dateKey: currentRun.dateKey,
+    score: detail.score, stageId: currentRun.stageId, mistakes: detail.mistakes,
+    maxCombo: detail.maxCombo, completed,
+  });
+  currentRun.stars += result.earnedStars;
+  currentRun.stored = result.stored;
+  for (const id of result.newAchievements) {
+    const name = ACHIEVEMENTS.find(item => item.id === id)!.title;
+    currentRun.awards.push(name);
+    if (!completed) toast(`새 배지! ${name} ✦`);
+  }
+  if (completed) currentRun.closed = true;
+  journey?.refresh();
 }
 function updateSound(): void {
   $('#sound-button').innerHTML = saved.sound || saved.music ? icons.sound : icons.mute;
@@ -109,6 +167,7 @@ function setScreen(value: typeof screen): void {
   $('#result-overlay').hidden = value !== 'result';
   setControls(value === 'playing');
   $('#game-canvas').classList.toggle('softened', value === 'paused' || value === 'result');
+  if (value !== 'playing') { clearTimeout(messageTimer); $('#play-message').classList.remove('visible'); $('#play-message').textContent = ''; }
   if (value === 'paused') sound.pause();
   else if (value === 'start' || value === 'result') sound.stop();
 }
@@ -142,53 +201,72 @@ async function refreshRankings(): Promise<void> {
   rankList($('#ranking-full'), entries, empty);
 }
 async function startRun(): Promise<void> {
-  if (starting || !scene) return;
+  if (starting || deleting || !scene) return;
   let name: string;
   try { name = normalizeName($<HTMLInputElement>('#player-name').value); } catch (error) { $('#name-error').textContent = (error as Error).message; return; }
-  sound.stop(); sound.unlock(); sound.prepare(mode);
+  sound.stop(); sound.unlock(); sound.prepare(ruleMode(mode));
   $('#name-error').textContent = ''; starting = true;
   submissionSequence++;
-  document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], #result-home').forEach(button => { button.disabled = true; });
+  document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], #result-home, #journey-open, #missions-open, #stage-select, #next-stage').forEach(button => { button.disabled = true; });
   $<HTMLInputElement>('#player-name').disabled = true;
   $('#start-button').textContent = '계단을 준비하고 있어요…';
   $<HTMLButtonElement>('#start-button').disabled = true;
   $<HTMLButtonElement>('#retry-button').disabled = true;
   runProfile = selectProfile(name); updateProfile();
+  if (mode === 'adventure' && !progressStore.isStageUnlocked(runProfile.id, selectedStage)) selectedStage = ADVENTURE_STAGES[0].id;
+  currentRun = { id: createProgressRunId(), mode, dateKey: seoulDateKey(), stageId: mode === 'adventure' ? selectedStage : undefined, stars: 0, awards: [], closed: false, stored: true, dailyBestAtStart: progressStore.get(runProfile.id).daily.best };
   ticket = undefined;
   if (mode === 'challenge') {
     try { ticket = await api.start(runProfile.id, name); }
     catch { toast('연결이 어려워요. 이번 기록은 이 기기에 저장할게요.'); }
   }
-  const seed = ticket?.seed ?? crypto.getRandomValues(new Uint32Array(1))[0];
-  scene.startRun(seed, mode); setScreen('playing');
+  const stage = selectedAdventure();
+  const seed = mode === 'daily' ? dailySeed(currentRun.dateKey) : mode === 'adventure' ? stage.seed : ticket?.seed ?? crypto.getRandomValues(new Uint32Array(1))[0];
+  scene.startRun(seed, ruleMode(mode), {
+    ...(mode === 'adventure' ? { world: stage.worldId, goal: stage.goal, mistakeLimit: 3 } : mode === 'daily' ? { goal: 150 } : {}),
+    companion: progressStore.get(runProfile.id).equippedCompanion,
+    starOffset: progressStore.get(runProfile.id).totalStairs % 10,
+  }); setScreen('playing');
   $<HTMLInputElement>('#player-name').blur();
-  $('#mode-badge').textContent = mode === 'practice' ? '☁ 연습 모드' : '⚡ 도전 모드';
-  $('#below-game').textContent = mode === 'practice' ? '실수해도 괜찮아요. 다음 계단을 보고 다시 눌러봐요.' : '반대쪽 계단이 보이면 방향 바꾸기!';
-  $('#energy-fill').parentElement!.classList.toggle('practice-energy', mode === 'practice');
+  $('#mode-badge').textContent = { practice: '☁ 연습', challenge: '⚡ 무한 도전', adventure: '🗺️ 세계 모험', daily: '☀️ 오늘의 계단' }[mode];
+  $('#score-unit').textContent = mode === 'adventure' ? `/ ${stage.goal} 계단` : mode === 'daily' ? '/ 150 계단' : '계단';
+  $('#below-game').textContent = ruleMode(mode) === 'practice' ? '다음 계단 힌트를 보고 천천히 올라가요.' : '반대쪽 계단이 보이면 방향 바꾸기!';
+  $('#energy-fill').parentElement!.classList.toggle('practice-energy', ruleMode(mode) === 'practice');
+  $('#step-hint').hidden = ruleMode(mode) !== 'practice';
   starting = false;
-  document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], #result-home').forEach(button => { button.disabled = false; });
+  document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], #result-home, #journey-open, #missions-open, #stage-select, #next-stage').forEach(button => { button.disabled = false; });
   $<HTMLInputElement>('#player-name').disabled = false;
   $('#start-button').innerHTML = '올라가 볼까? <span>↗</span>';
   $<HTMLButtonElement>('#start-button').disabled = false;
   $<HTMLButtonElement>('#retry-button').disabled = false;
-  sound.playMusic(mode); sound.tone('step');
+  sound.playMusic(ruleMode(mode)); sound.tone('step');
   if (document.hidden || !document.hasFocus()) pause();
-  message(mode === 'practice' ? '시간 걱정 없이, 천천히 올라가요!' : '오른쪽부터! 오르기를 눌러봐요.');
+  message(mode === 'adventure' ? `${stage.title}, 출발!` : mode === 'practice' ? '시간 걱정 없이, 천천히 올라가요!' : mode === 'daily' ? '오늘은 같은 길, 나만의 최고에 도전!' : '오른쪽부터! 오르기를 눌러봐요.');
 }
 async function endRun(result: RunResult): Promise<void> {
   if (!runProfile) return;
   const seq = ++submissionSequence;
   const profile = runProfile;
   const runTicket = ticket;
-  const { newBest, stored } = rememberScore(profile, result.mode, result.score);
+  const playedMode = currentRun?.mode || mode;
+  const oldDailyBest = currentRun?.dailyBestAtStart || 0;
+  saveJourney(true);
+  const normalMode = playedMode === 'challenge' || playedMode === 'practice';
+  const { newBest, stored } = normalMode ? rememberScore(profile, result.mode, result.score) : { newBest: playedMode === 'daily' && result.score > oldDailyBest, stored: currentRun?.stored ?? false };
+  const cleared = playedMode === 'adventure' && result.reason === 'finished';
   updateProfile(); setScreen('result');
   $('#result-score').textContent = result.score.toLocaleString();
-  $('#result-kicker').textContent = newBest ? '새로운 최고 기록!' : '아주 멋진 도전!';
-  $('#result-copy').textContent = result.reason === 'wrong' ? '반대쪽 계단에서는 방향을 바꿔봐요!' : result.reason === 'time' ? '한 계단 더! 다시 도전해 볼까요?' : '끝까지 올라왔어요. 정말 대단해요!';
-  $('#result-best').textContent = `${result.mode === 'practice' ? profile.practiceBest : profile.best} 계단`;
-  $('#save-status').textContent = stored ? (result.mode === 'practice' ? '연습 기록은 이 기기에만 저장해요.' : '이 기기에 기록을 저장했어요.') : '브라우저 저장 공간을 사용할 수 없어요.';
-  sound.tone(newBest ? 'record' : 'end');
-  if (result.mode === 'challenge' && runTicket && result.score > 0) {
+  $('#result-kicker').textContent = cleared ? '모험 완주! 참 잘했어요 ✦' : newBest ? '새로운 최고 기록!' : '아주 멋진 도전!';
+  $('#result-copy').textContent = cleared ? `${worldById(selectedAdventure().worldId).name}에서 멋진 추억을 만들었어요.` : result.reason === 'wrong' ? playedMode === 'adventure' ? '세 번의 연습을 마쳤어요. 다음에는 더 높이!' : '반대쪽 계단에서는 방향을 바꿔봐요!' : result.reason === 'time' ? '한 계단 더! 다시 도전해 볼까요?' : '끝까지 올라왔어요. 정말 대단해요!';
+  $('#result-rewards').textContent = `✦ ${currentRun?.stars || 0}별을 모았어요${currentRun?.awards.length ? ` · 새 배지 ${currentRun.awards.length}개` : ''}`;
+  $('#result-best-label').textContent = playedMode === 'adventure' ? '완주한 모험' : playedMode === 'daily' ? `${currentRun?.dateKey.slice(5)} 최고` : '나의 최고';
+  $('#result-best').textContent = playedMode === 'adventure' ? `${progressStore.get(profile.id).completedStages.length} / 5` : `${playedMode === 'daily' ? Math.max(oldDailyBest, result.score) : result.mode === 'practice' ? profile.practiceBest : profile.best} 계단`;
+  $('#save-status').textContent = stored && currentRun?.stored ? normalMode ? '기록과 모은 별을 이 기기에 저장했어요.' : '모험 기록은 이 브라우저에 저장했어요.' : '브라우저 저장 공간을 사용할 수 없어요.';
+  const stageIndex = ADVENTURE_STAGES.findIndex(stage => stage.id === currentRun?.stageId);
+  $('#next-stage').hidden = !cleared || stageIndex >= ADVENTURE_STAGES.length - 1;
+  $('#retry-button').classList.toggle('secondary-retry', !$('#next-stage').hidden);
+  sound.tone(newBest || cleared ? 'record' : 'end');
+  if (playedMode === 'challenge' && runTicket && result.score > 0) {
     $('#save-status').textContent = '순위표에 기록을 확인하고 있어요…';
     try {
       const response = await api.submit(runTicket.token, result.inputs);
@@ -201,10 +279,17 @@ async function endRun(result: RunResult): Promise<void> {
 }
 function pause(): void {
   if (screen !== 'playing') return;
-  scene.setPaused(true); setScreen('paused');
+  scene.setPaused(true); setScreen('paused'); saveJourney();
 }
 function home(): void {
-  submissionSequence++; scene.idle(); setScreen('start');
+  if (currentRun && !currentRun.closed) {
+    if (runProfile && currentRun.mode === 'practice') rememberScore(runProfile, 'practice', scene.getProgress().score);
+    saveJourney(true);
+  }
+  currentRun = undefined;
+  submissionSequence++;
+  scene.idle({ companion: progressStore.get(activeProfile()?.id || 'preview').equippedCompanion });
+  setScreen('start');
   $('#play-message').classList.remove('visible'); updateProfile();
   $('#below-game').textContent = '내 속도로 즐기고 싶다면, 연습 모드로 시작해요.';
 }
@@ -214,12 +299,11 @@ function act(action: Action): void { if (screen === 'playing') scene.act(action)
 $('#start-form').addEventListener('submit', event => { event.preventDefault(); void startRun(); });
 $('#retry-button').addEventListener('click', () => void startRun());
 $('#result-home').addEventListener('click', home);
-$('#pause-home').addEventListener('click', () => {
-  if (mode === 'practice' && runProfile) {
-    const displayedScore = Number($('#score').textContent!.replaceAll(',', ''));
-    rememberScore(runProfile, mode, displayedScore);
-  }
-  home();
+$('#pause-home').addEventListener('click', home);
+$('#next-stage').addEventListener('click', () => {
+  const index = ADVENTURE_STAGES.findIndex(stage => stage.id === currentRun?.stageId);
+  const next = ADVENTURE_STAGES[index + 1];
+  if (next) { chooseMode('adventure', next.id); void startRun(); }
 });
 $('#pause-button').addEventListener('click', pause);
 $('#resume-button').addEventListener('click', () => { scene.setPaused(false); setScreen('playing'); sound.resume(); });
@@ -250,12 +334,8 @@ $('#effects-toggle').addEventListener('change', () => {
   saved.sound = $<HTMLInputElement>('#effects-toggle').checked; persist();
   sound.setPreferences(saved.music, saved.sound); sound.unlock(); updateSound(); sound.tone('step');
 });
-document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => button.addEventListener('click', () => {
-  mode = button.dataset.mode as Mode;
-  document.querySelectorAll('[data-mode]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
-  $('#mode-description').textContent = mode === 'practice' ? '시간 제한 없이, 실수해도 다시 올라가요.' : '시간 안에 올라가며 최고 기록에 도전해요.';
-  updateProfile();
-}));
+document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => button.addEventListener('click', () => chooseMode(button.dataset.mode as GameMode)));
+$('#stage-select').addEventListener('click', () => journey.open('map'));
 for (const id of ['#all-rankings', '#rank-mobile']) $(id).addEventListener('click', () => { openDialog('#ranking-dialog'); void refreshRankings(); });
 $('#help-button').addEventListener('click', () => openDialog('#help-dialog'));
 $('#help-close').addEventListener('click', () => $<HTMLDialogElement>('#help-dialog').close());
@@ -284,17 +364,34 @@ $('#new-profile').addEventListener('click', () => {
 });
 let deleteArmed = false;
 $('#delete-profile').addEventListener('click', async () => {
+  if (deleting) return;
   if (!deleteArmed) { deleteArmed = true; $('#delete-profile').textContent = '정말 삭제할까요? 다시 누르면 삭제돼요'; return; }
   const profile = activeProfile(); if (!profile) return;
+  deleting = true;
+  const disabled = [...document.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button,input')].map(element => [element, element.disabled] as const);
+  disabled.forEach(([element]) => { element.disabled = true; });
   try {
     await api.remove(profile.id);
-    saved.profiles = saved.profiles.filter(p => p.id !== profile.id); saved.activeId = saved.profiles[0]?.id || ''; persist();
+    if (!progressStore.deleteProfileProgress(profile.id)) throw new Error('서버 기록은 지웠지만 기기의 모험 기록을 지우지 못했어요. 브라우저 저장 공간을 확인하고 다시 시도해 주세요.');
+    const previousProfiles = saved.profiles, previousId = saved.activeId;
+    saved.profiles = saved.profiles.filter(p => p.id !== profile.id); saved.activeId = saved.profiles[0]?.id || '';
+    if (!persist()) {
+      saved.profiles = previousProfiles; saved.activeId = previousId;
+      throw new Error('서버와 모험 기록은 지웠지만 캐릭터 정보를 기기에 저장하지 못했어요. 다시 시도해 주세요.');
+    }
+    currentRun = undefined; runProfile = undefined;
     $<HTMLDialogElement>('#profile-dialog').close(); $<HTMLInputElement>('#player-name').value = activeProfile()?.name || '';
     home(); void refreshRankings(); toast('캐릭터와 기록을 삭제했어요.');
-  } catch { $('#profile-error').textContent = '서버 기록을 지우지 못했어요. 연결 후 다시 시도해 주세요.'; }
+  } catch (error) { $('#profile-error').textContent = error instanceof Error ? error.message : '기록을 지우지 못했어요. 연결 후 다시 시도해 주세요.'; }
+  finally { deleting = false; disabled.forEach(([element, value]) => { element.disabled = value; }); }
   deleteArmed = false; $('#delete-profile').textContent = '현재 캐릭터와 기록 삭제';
 });
 
+journey = new JourneyBook({ store: progressStore, profile: activeProfile, ensureProfile,
+  stage: () => selectedStage, selectStage: stage => chooseMode('adventure', stage.id),
+  selectDaily: () => chooseMode('daily'), beforeOpen: pause, notify: toast,
+  equip: id => scene?.setCompanion(id),
+});
 sound.setPreferences(saved.music, saved.sound);
 updateProfile(); updateSound(); void refreshRankings();
 createGame($('#game-canvas'), {
@@ -304,13 +401,27 @@ createGame($('#game-canvas'), {
     $('#energy-fill').classList.toggle('low', energy < .25);
   },
   step: (action, score) => {
-    if (score === -1) { message('다음 계단을 보고, 다른 버튼을 눌러봐요!'); return; }
+    if (score === -1) return;
     sound.tone(action === 'turn' ? 'turn' : 'step', score);
-    if (score % 10 === 0) message(`${score}계단! 아주 잘하고 있어요 ✦`);
+  },
+  progress: detail => {
+    const world = worldById(detail.worldId);
+    $('#world-label').textContent = `${world.icon} ${world.name}`;
+    $('#run-combo').textContent = mode === 'adventure' ? `${'♥'.repeat(detail.mistakesLeft ?? 3)}${'♡'.repeat(detail.mistakes)}` : `${detail.combo} 연속`;
+    $('#run-stars').textContent = `✦ ${detail.collected}`;
+    $('#step-hint').textContent = detail.nextAction === 'turn' ? '↶ 다음은 방향 바꾸기' : '↑ 다음은 오르기';
+    $('#step-hint').dataset.action = detail.nextAction;
+    document.querySelector('.game-shell')!.setAttribute('data-world', detail.worldId);
+    if (currentRun) {
+      if (currentRun.world && currentRun.world !== detail.worldId) message(`${world.icon} ${world.name}에 도착했어요!`);
+      currentRun.world = detail.worldId;
+      saveJourney();
+    }
   },
   end: result => void endRun(result),
 }).then(result => {
   scene = result.scene;
+  scene.setCompanion(progressStore.get(activeProfile()?.id || 'preview').equippedCompanion);
   $('#start-button').innerHTML = '올라가 볼까? <span>↗</span>';
   $<HTMLButtonElement>('#start-button').disabled = false;
 }).catch(() => { $('#start-button').textContent = '새로고침해서 다시 시작해 주세요'; });
