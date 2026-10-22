@@ -195,6 +195,7 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
   }
   function sync(): void {
     const status = session.getStatus(); updateHUD(status);
+    if (!status.feedback) lastFeedback = '';
     if (phase === 'playing') {
       if (lastStatus && status.stars > lastStatus.stars) audio.tone('step', status.stars);
       if (lastStatus && (status.mistakes || 0) > (lastStatus.mistakes || 0)) audio.tone('turn');
@@ -205,7 +206,7 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
     }
     lastStatus = status;
   }
-  function act(action: MiniAction): void { if (phase !== 'playing') return; session.act(action); sync(); }
+  function act(action: MiniAction): void { if (phase !== 'playing') return; if (action === 'hint') lastFeedback = ''; session.act(action); sync(); }
   form.addEventListener('submit', event => { event.preventDefault(); start(); });
   nameInput.addEventListener('input', () => { nameError.textContent = ''; });
   nameInput.addEventListener('change', () => { if (phase !== 'ready') return; try { normalizeName(nameInput.value); } catch { return; } restorePreferences(); renderChoices(); preview(); });

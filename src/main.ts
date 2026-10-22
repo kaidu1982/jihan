@@ -6,6 +6,7 @@ const selection = new URLSearchParams(window.location.search).get('game');
 const miniGames: Record<string, () => Promise<{ default: MiniGameDefinition }>> = {
   dino: () => import('./dino'),
   space: () => import('./space'),
+  maze: () => import('./maze'),
 };
 const load = selection === 'stairs'
   ? import('./stairs')
