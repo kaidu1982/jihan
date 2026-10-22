@@ -154,6 +154,7 @@ function draw(context: CanvasRenderingContext2D, session: SpaceSession, frame: M
     if (arrival > .35) context.fillText('우주 정거장이 보여!', 210, -5 + arrival * 300);
   }
 
+  const readyFriend = session.signalsRemaining > 0 ? session.signalTarget : undefined;
   for (const object of session.objects) {
     const untilArrival = object.arrivalAt - time;
     if (untilArrival > SPACE_LOOKAHEAD_MS || untilArrival < -600 || object.outcome === 'collected' || object.outcome === 'shielded' || object.outcome === 'bumped') continue;
@@ -164,13 +165,32 @@ function draw(context: CanvasRenderingContext2D, session: SpaceSession, frame: M
     if (object.kind === 'star') {
       circle(context, 0, 0, 19, '#fff2a812'); star(context, 0, 0, 12, '#ffe7a2'); circle(context, -3, -4, 2, '#fff9d2');
     } else if (object.kind === 'friend') {
+      if (object === readyFriend) {
+        circle(context, 0, 0, 36, '#ffedb32d');
+        context.strokeStyle = '#ffe5a0'; context.lineWidth = 2;
+        context.beginPath(); context.arc(0, 0, 33, 0, Math.PI * 2); context.stroke();
+      }
       friend(context, object.variant, motion * 2 + object.id);
-      context.textAlign = 'center'; context.fillStyle = '#edf7ff'; context.font = '700 10px system-ui, sans-serif'; context.fillText('여기야!', 0, -39);
+      context.textAlign = 'center'; context.fillStyle = object === readyFriend ? '#ffe5a0' : '#edf7ff'; context.font = '700 10px system-ui, sans-serif'; context.fillText(object === readyFriend ? '신호로 구조!' : '여기야!', 0, -39);
     } else meteor(context, object.variant, motion);
     context.restore();
   }
   // Engine particles follow active time, so the whole scene also freezes on pause.
   const shipX = 100 + session.lane * 110;
+  const signal = session.signalRescue;
+  if (signal && time - signal.startedAt < 700) {
+    const progress = Math.min(1, (time - signal.startedAt) / 700);
+    const travel = reducedMotion ? 1 : 1 - (1 - progress) ** 3;
+    const sourceX = 100 + signal.lane * 110;
+    const sourceY = 430 - (signal.arrivalAt - signal.startedAt) * .081;
+    context.save(); context.globalAlpha = 1 - progress * .7;
+    context.beginPath(); context.arc(shipX, 426, reducedMotion ? 68 : 42 + progress * 105, 0, Math.PI * 2);
+    context.strokeStyle = '#ffe8a7'; context.lineWidth = 3; context.stroke();
+    context.beginPath(); context.moveTo(shipX, 417); context.lineTo(sourceX, sourceY);
+    context.strokeStyle = '#fff1c580'; context.lineWidth = 9 * (1 - progress); context.stroke();
+    context.translate(sourceX + (shipX - sourceX) * travel, sourceY + (402 - sourceY) * travel);
+    context.scale(.8, .8); friend(context, signal.variant, 0); context.restore();
+  }
   if (!reducedMotion) {
     for (let i = 0; i < 7; i++) {
       const drift = (time / 7 + i * 16) % 100;
@@ -180,11 +200,26 @@ function draw(context: CanvasRenderingContext2D, session: SpaceSession, frame: M
   context.save(); context.translate(shipX, 430);
   const tilt = reducedMotion ? 0 : (session.targetLane - session.lane) * .18;
   context.rotate(tilt); ship(context, session.character, time, reducedMotion, session.shielded); context.restore();
+  // Three lit beacons match the three available rescue signals.
+  context.beginPath(); context.roundRect(18, 508, 166, 39, 16); context.fillStyle = '#17234dbb'; context.fill();
+  context.textAlign = 'left'; context.fillStyle = '#edf7ff'; context.font = '700 12px system-ui, sans-serif';
+  context.fillText('구조 신호', 31, 532);
+  for (let signalIndex = 0; signalIndex < 3; signalIndex++) {
+    const x = 119 + signalIndex * 21;
+    circle(context, x, 527, 6, signalIndex < session.signalsRemaining ? '#ffe3a2' : '#596481');
+    if (signalIndex < session.signalsRemaining) {
+      context.beginPath(); context.arc(x, 527, 9, -.9, .9); context.strokeStyle = '#ffe3a280'; context.lineWidth = 1.5; context.stroke();
+    }
+  }
+  if (readyFriend && !session.finished) {
+    context.textAlign = 'center'; context.font = '700 12px system-ui, sans-serif'; context.fillStyle = '#ffe3a2';
+    context.fillText('친구에게 신호를 보내요!', 293, 532);
+  }
   if (time < 4_400) {
     const alpha = Math.min(1, (4_400 - time) / 500);
     context.globalAlpha = alpha; context.textAlign = 'center'; context.fillStyle = '#f6f2ff'; context.font = '800 17px system-ui, sans-serif';
     context.fillText('별길을 따라 친구를 데리러 가자!', 210, 298);
-    context.font = '500 12px system-ui, sans-serif'; context.fillStyle = '#dae5ff'; context.fillText('← 왼쪽 · 오른쪽 →   운석은 살짝 피해요', 210, 322); context.globalAlpha = 1;
+    context.font = '500 12px system-ui, sans-serif'; context.fillStyle = '#dae5ff'; context.fillText('← → 움직이기 · 가까운 친구는 구조 신호!', 210, 322); context.globalAlpha = 1;
   }
   context.restore();
 }
@@ -195,18 +230,19 @@ const space: MiniGameDefinition = {
   icon: '🚀',
   kicker: '친구를 찾아 떠나는 여행',
   tagline: '반짝이는 별길 끝에 누가 있을까?',
-  description: '우주선을 움직여 길 잃은 동물 친구들을 데려와요. 운석을 피하고 별을 모아 우주 정거장으로 출발!',
+  description: '별길을 따라 동물 친구들을 데려와요. 가까운 옆길의 친구에게 구조 신호를 보내고 우주 정거장으로 출발!',
   accent: '#8388dd',
   startLabel: '우주로 출발',
   scoreUnit: '명 구조',
   instructions: [
     { icon: '↔️', title: '좌우로 슝!', copy: '왼쪽·오른쪽 버튼이나 방향키로 우주선을 움직여요.' },
-    { icon: '🐰', title: '친구를 구해요', copy: '별길을 따라 동물 친구에게 가요. 3명 이상 만나면 임무 성공!' },
-    { icon: '🛡️', title: '끝까지 탐험', copy: '운석에 닿아도 보호막이 지켜줘요. 54초 뒤 우주 정거장에 도착해요.' },
+    { icon: '📡', title: '구조 신호는 세 번!', copy: '가까운 옆길 친구는 구조 신호 버튼이나 스페이스 키로 데려와요. 친구가 없으면 횟수를 쓰지 않아요.' },
+    { icon: '🐰', title: '친구와 끝까지 탐험', copy: '별길에서 친구를 만나요. 운석에 닿아도 계속 출발! 54초 뒤 도착하고, 6명·10명 구조 메달에 도전해요.' },
   ],
   controls: [
     { action: 'left', label: '왼쪽', icon: '←', keys: ['ArrowLeft', 'a', 'A'] },
     { action: 'right', label: '오른쪽', icon: '→', keys: ['ArrowRight', 'd', 'D'] },
+    { action: 'signal', label: '구조 신호', icon: '📡', keys: ['Space'] },
   ],
   stages: [
     { name: '민트 행성', icon: '🪐', copy: '초록빛 행성에서 첫 구조 임무' },

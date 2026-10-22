@@ -73,14 +73,14 @@ function dinosaur(ctx: CanvasRenderingContext2D, session: DinoSession, x: number
 
 const definition: MiniGameDefinition = {
   id: 'dino', title: '공룡 달리기', icon: '🦖', kicker: '폴짝폴짝 공룡 탐험',
-  tagline: '알을 모으며 숲속을 폴짝!', description: '달리는 공룡과 함께 바위와 작은 구덩이를 넘고, 반짝이는 공룡 알을 찾아요.',
+  tagline: '두 번 폴짝! 공룡 알을 찾아요', description: '달리는 공룡과 함께 바위와 작은 구덩이를 넘어요. 공중에서 한 번 더 점프해 반짝이는 공룡 알을 찾아요.',
   accent: '#4b9867', startLabel: '공룡이랑 달리기', scoreUnit: 'm',
   instructions: [
-    { icon: '👆', title: '버튼 하나로 폴짝', copy: '공룡은 저절로 달려요. 바위가 다가오면 점프 버튼을 눌러요.' },
+    { icon: '👆', title: '한 번, 두 번 폴짝!', copy: '바위 앞에서 점프! 공중에서 한 번 더 누르면 더 높이 뛰어요. 땅에 내려오면 다시 두 번!' },
     { icon: '🥚', title: '공룡 알을 찾아요', copy: '점프해서 알을 모아요. 모은 알은 새 공룡을 만나는 별이 돼요.' },
     { icon: '🏁', title: '천천히 해도 괜찮아', copy: '부딪혀도 다시 달릴 수 있어요. 약 50초 뒤 결승선에서 만나요!' },
   ],
-  controls: [{ action: 'jump', label: '점프', icon: '↑', keys: ['Space', 'ArrowUp', 'KeyW'] }],
+  controls: [{ action: 'jump', label: '점프 · 한 번 더!', icon: '↑', keys: ['Space', 'ArrowUp', 'KeyW'] }],
   stages: [
     { name: '초록 화석 숲', icon: '🌿', copy: '커다란 나무와 싱그러운 풀밭' },
     { name: '노을 공룡 계곡', icon: '🌅', copy: '따뜻한 노을 아래 알 찾기' },
@@ -178,6 +178,25 @@ const definition: MiniGameDefinition = {
       ctx.fillStyle = '#fffdf0'; ctx.beginPath(); ctx.moveTo(x - 4, ground - 96); ctx.lineTo(x + 4, ground - 96); ctx.lineTo(x, ground - 90); ctx.fill();
     }
     dinosaur(ctx, session, 86, ground);
+    if (session.elapsed < session.jumpBurstUntil) {
+      const burst = 1 - (session.jumpBurstUntil - session.elapsed) / 400;
+      const y = ground - session.height + 8;
+      ctx.save(); ctx.globalAlpha = 1 - burst;
+      ctx.strokeStyle = '#fff3ad'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(86, y, frame.reducedMotion ? 27 : 19 + burst * 23, frame.reducedMotion ? 8 : 5 + burst * 8, 0, 0, Math.PI * 2); ctx.stroke();
+      if (!frame.reducedMotion) for (const offset of [-1, 0, 1]) {
+        ellipse(ctx, 86 + offset * (19 + burst * 15), y + burst * 25, 3, 3, '#fff1b5');
+      }
+      ctx.restore();
+    }
+    if (!session.finished) {
+      round(ctx, 22, ground + 63, 170, 34, 15, '#fffdf1eb');
+      ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = '#386e4b';
+      ctx.fillText(session.grounded ? '다시 두 번 폴짝!' : '남은 공중 점프', 34, ground + 85);
+      for (let hop = 0; hop < 2; hop++) {
+        ellipse(ctx, 157 + hop * 19, ground + 80, 6, 8, hop < session.jumpsRemaining ? '#69ad65' : '#dce5cd');
+      }
+    }
     for (let i = -1; i < 6; i++) {
       const x = i * 100 - (session.distance * 1.12) % 100;
       fern(ctx, x + 25, 546 + (i % 2) * 11, 30 + (i % 2) * 12, p.leaf);
@@ -186,7 +205,7 @@ const definition: MiniGameDefinition = {
     if (session.elapsed < 3_700) {
       round(ctx, 126, 185, 204, 59, 18, '#fffdf1ed');
       ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#386e4b'; ctx.fillText('공룡과 함께 출발!', 228, 209);
-      ctx.font = '12px sans-serif'; ctx.fillText('다가오는 바위 앞에서 폴짝 ↑', 228, 230);
+      ctx.font = '12px sans-serif'; ctx.fillText('공중에서 한 번 더 폴짝 ↑', 228, 230);
     }
     ctx.restore();
   },

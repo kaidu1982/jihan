@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DinoSession, DINO_COURSE_LENGTH, makeDinoCourse } from '../src/dino-session';
+import { DinoSession, DINO_COURSE_LENGTH, DINO_JUMP_SPEED, makeDinoCourse } from '../src/dino-session';
 import dino from '../src/dino';
 
 function run(seed: number, jump: boolean, step = 16): DinoSession {
@@ -40,6 +40,8 @@ test('real seeded runs finish in 45–60 seconds; one well-timed jump clears eve
     assert.equal(status.won, true);
     assert.equal(status.score, 900);
     assert.ok(status.summary.includes('완주'));
+    assert.equal(session.clearedObstacles, session.obstacles.length);
+    assert.ok(status.objectives?.every(objective => objective.done));
   }
 });
 
@@ -50,18 +52,49 @@ test('missed jumps stumble and recover; even a no-input run can finish', () => {
   assert.ok(session.elapsed < 60_000);
   assert.equal(session.getStatus().won, true);
   assert.ok(session.stars > 0);
+  assert.equal(session.getStatus().objectives?.find(objective => objective.id === 'leaps')?.done, false);
 });
 
-test('jump is grounded only and always lands safely; gaps cause a forgiving bounce', () => {
+test('one extra airborne jump is available, a third is ignored, and landing restores both jumps', () => {
   const session = new DinoSession();
+  assert.equal(session.jumpsRemaining, 2);
   session.act('jump'); session.advance(100);
   assert.ok(session.height > 0);
-  const velocity = session.velocity;
+  // The first jump keeps the original ground jump physics.
+  assert.ok(Math.abs(session.height - 45.75) < .001);
+  assert.equal(session.jumpsRemaining, 1);
   session.act('jump');
+  assert.equal(session.velocity, DINO_JUMP_SPEED);
+  assert.equal(session.jumpsRemaining, 0);
+  assert.match(session.getStatus().feedback ?? '', /두 번/);
+  session.advance(100);
+  const velocity = session.velocity;
+  session.act('up');
   assert.equal(session.velocity, velocity);
-  session.advance(800);
+  session.advance(1_200);
   assert.equal(session.height, 0);
   assert.equal(session.grounded, true);
+  assert.equal(session.jumpsRemaining, 2);
+  session.act('up'); session.advance(100); session.act('jump');
+  assert.equal(session.velocity, DINO_JUMP_SPEED);
+  assert.equal(session.jumpsRemaining, 0);
+});
+
+test('a second jump can save a descending dinosaur before a rock; missed gaps still recover', () => {
+  const saved = new DinoSession();
+  const missed = new DinoSession();
+  const rock = saved.obstacles.find(obstacle => obstacle.kind === 'rock')!;
+  for (const session of [saved, missed]) {
+    session.distance = rock.x - rock.width / 2 - 14 - 25;
+    session.height = 12; session.velocity = -80; session.jumpsUsed = 1;
+  }
+  saved.act('jump');
+  saved.advance(500); missed.advance(500);
+  assert.equal(saved.mistakes, 0);
+  assert.equal(missed.mistakes, 1);
+  assert.equal(saved.obstacles.find(obstacle => obstacle.id === rock.id)?.resolved, true);
+
+  const session = new DinoSession();
   const gap = session.obstacles.find(obstacle => obstacle.kind === 'gap');
   assert.ok(gap);
   const gapSession = new DinoSession();
@@ -70,6 +103,7 @@ test('jump is grounded only and always lands safely; gaps cause a forgiving boun
   assert.equal(gapSession.mistakes, 1);
   assert.ok(gapSession.height > 0);
   assert.equal(gapSession.protected, true);
+  assert.equal(gapSession.jumpsRemaining, 1);
   gapSession.advance(1_200);
   assert.equal(gapSession.grounded, true);
   assert.equal(gapSession.protected, false);

@@ -8,6 +8,8 @@ import { ProgressStore, createProgressRunId, dailySeed, seoulDateKey } from './p
 import { JourneyBook } from './journey';
 import { deleteKartProgress } from './kart-storage';
 import { deleteMiniProgress } from './mini-storage';
+import { STAIRS_LESSON, lessonCue } from './stairs-lesson';
+import './stairs-lesson.css';
 
 document.body.classList.add('stairs-page');
 document.title = '지한이의 무한계단 · 작은 오락실';
@@ -43,11 +45,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <section class="game-column" aria-label="무한계단 게임">
       <div class="game-shell">
         <div id="game-canvas" aria-label="지한이가 구름 위 계단을 오르는 게임 화면"></div>
-        <div class="game-hud" id="hud" hidden><div class="mode-badge" id="mode-badge">도전 모드</div><div class="score-display"><strong id="score">0</strong><span id="score-unit">계단</span></div><button id="pause-button" class="pause-button" aria-label="일시정지">${icons.pause}</button><div class="energy-track" aria-label="남은 시간"><div id="energy-fill"></div></div><div class="journey-hud"><span id="world-label">구름 초원</span><span id="run-combo">0 연속</span><span id="run-stars">✦ 0</span></div><div id="step-hint" class="step-hint" hidden></div></div>
+        <div class="game-hud" id="hud" hidden><div class="mode-badge" id="mode-badge">도전 모드</div><div class="score-display"><strong id="score">0</strong><span id="score-unit">계단</span></div><button id="pause-button" class="pause-button" aria-label="일시정지">${icons.pause}</button><div class="energy-track" aria-label="남은 시간"><div id="energy-fill"></div></div><div class="journey-hud"><span id="world-label">구름 초원</span><span id="run-combo">0 연속</span><span id="run-stars">✦ 0</span></div><div id="step-hint" class="step-hint" hidden></div><div id="lesson-guide" class="stairs-lesson-guide" role="status" aria-live="polite" aria-atomic="true" hidden><div><span id="lesson-chapter"></span><span id="lesson-progress"></span></div><strong id="lesson-instruction"></strong><p id="lesson-explanation"></p><small>시간 제한 없이, 틀려도 다시 해 봐요.</small></div></div>
         <div class="sky-label" id="sky-label"><span>✦</span> 오늘의 모험은 구름 위로</div>
         <div class="start-overlay" id="start-overlay">
           <img class="start-mascot" src="/assets/jihan-climber.png" alt="빨간 운동화를 신고 웃고 있는 지한이" />
-          <div class="start-card"><div class="card-kicker">HELLO, ADVENTURER!</div><h2 id="welcome-title">어떤 이름으로 놀까요?</h2><form id="start-form"><label class="sr-only" for="player-name">캐릭터 이름</label><div class="name-field">${icons.user}<input id="player-name" name="name" maxlength="12" autocomplete="off" placeholder="캐릭터 이름" required><span>✎</span></div><p class="field-error" id="name-error" role="alert"></p><div class="mode-picker" role="group" aria-label="게임 모드"><button type="button" data-mode="challenge" aria-pressed="true"><span>⚡</span> 무한 도전</button><button type="button" data-mode="adventure" aria-pressed="false"><span>🗺️</span> 세계 모험</button><button type="button" data-mode="daily" aria-pressed="false"><span>☀️</span> 오늘의 계단</button><button type="button" data-mode="practice" aria-pressed="false"><span>☁</span> 편안한 연습</button></div><p class="mode-description" id="mode-description">50계단마다 새로운 풍경! 최고 기록에 도전해요.</p><button id="stage-select" class="stage-select" type="button" hidden></button><button class="primary-button start-button" id="start-button" type="submit" disabled>게임 준비 중…</button></form><p class="start-footnote">이름 하나면 준비 끝. 가입 없이 놀아요.</p></div>
+          <div class="start-card"><div class="card-kicker">HELLO, ADVENTURER!</div><h2 id="welcome-title">어떤 이름으로 놀까요?</h2><form id="start-form"><label class="sr-only" for="player-name">캐릭터 이름</label><div class="name-field">${icons.user}<input id="player-name" name="name" maxlength="12" autocomplete="off" placeholder="캐릭터 이름" required><span>✎</span></div><p class="field-error" id="name-error" role="alert"></p><div class="mode-picker" role="group" aria-label="게임 모드"><button type="button" data-mode="challenge" aria-pressed="true"><span>⚡</span> 무한 도전</button><button type="button" data-mode="adventure" aria-pressed="false"><span>🗺️</span> 세계 모험</button><button type="button" data-mode="daily" aria-pressed="false"><span>☀️</span> 오늘의 계단</button><button type="button" data-mode="practice" aria-pressed="false"><span>☁</span> 편안한 연습</button></div><p class="mode-description" id="mode-description">50계단마다 새로운 풍경! 최고 기록에 도전해요.</p><button id="stage-select" class="stage-select" type="button" hidden></button><button type="button" id="lesson-start" class="stairs-lesson-start" disabled><span>🎓</span><span><strong>처음이라면? 12계단 조작 교실</strong><small>두 버튼을 하나씩 배워요 · 시간 제한 없어요</small></span><b>↗</b></button><button class="primary-button start-button" id="start-button" type="submit" disabled>게임 준비 중…</button></form><p class="start-footnote">이름 하나면 준비 끝. 가입 없이 놀아요.</p></div>
         </div>
         <div class="play-message" id="play-message" role="status"></div>
         <div class="pause-overlay" id="pause-overlay" hidden><div class="pause-card"><span class="pause-cloud">☁</span><h2>잠깐 쉬어가요</h2><p>지한이가 여기서 기다리고 있어요.</p><button id="resume-button" class="primary-button">계속 올라가기 <span>↗</span></button><button id="pause-home" class="text-button">처음으로</button></div></div>
@@ -74,7 +76,7 @@ let mode: GameMode = 'challenge';
 let selectedStage = ADVENTURE_STAGES[0].id;
 const progressStore = new ProgressStore();
 let journey: JourneyBook;
-let currentRun: { id: string; mode: GameMode; dateKey: string; stageId?: string; stars: number; awards: string[]; closed: boolean; stored: boolean; world?: string; dailyBestAtStart: number } | undefined;
+let currentRun: { id: string; lesson: boolean; mode: GameMode; dateKey: string; stageId?: string; stars: number; awards: string[]; closed: boolean; stored: boolean; world?: string; dailyBestAtStart: number } | undefined;
 let runProfile: Profile | undefined;
 let ticket: Ticket | undefined;
 let screen: 'start' | 'playing' | 'paused' | 'result' = 'start';
@@ -88,6 +90,7 @@ let submissionSequence = 0;
 const sound = new GameAudio({ onStatus: () => updateSound() });
 const ruleMode = (value: GameMode): Mode => value === 'practice' || value === 'adventure' ? 'practice' : 'challenge';
 const selectedAdventure = () => ADVENTURE_STAGES.find(stage => stage.id === selectedStage)!;
+const isLesson = () => currentRun?.lesson === true;
 function ensureProfile(): Profile | undefined {
   if (activeProfile()) return activeProfile();
   try {
@@ -134,7 +137,7 @@ function chooseMode(value: GameMode, stageId?: string): void {
   updateProfile();
 }
 function saveJourney(completed = false): void {
-  if (!currentRun || currentRun.closed || !runProfile || !scene) return;
+  if (!currentRun || currentRun.lesson || currentRun.closed || !runProfile || !scene) return;
   const detail = scene.getProgress();
   const result = progressStore.record(runProfile.id, {
     runId: currentRun.id, mode: currentRun.mode, dateKey: currentRun.dateKey,
@@ -174,6 +177,25 @@ function setScreen(value: typeof screen): void {
   if (value !== 'playing') { clearTimeout(messageTimer); $('#play-message').classList.remove('visible'); $('#play-message').textContent = ''; }
   if (value === 'paused') sound.pause();
   else if (value === 'start' || value === 'result') sound.stop();
+  updateLessonGuide();
+}
+function updateLessonGuide(): void {
+  const visible = isLesson() && screen === 'playing';
+  $('#lesson-guide').hidden = !visible;
+  document.querySelector('.game-column')!.classList.toggle('stairs-lesson-playing', visible);
+  const cue = visible ? lessonCue(scene.getProgress()) : undefined;
+  for (const [id, action] of [['#turn-button', 'turn'], ['#climb-button', 'climb']] as const) {
+    const button = $(id);
+    button.classList.toggle('stairs-lesson-next', cue?.action === action);
+    if (visible) button.setAttribute('aria-describedby', 'lesson-guide');
+    else button.removeAttribute('aria-describedby');
+  }
+  if (!cue) return;
+  $('#lesson-chapter').textContent = cue.chapter;
+  $('#lesson-progress').textContent = `${cue.step} / ${STAIRS_LESSON.goal}`;
+  $('#lesson-instruction').textContent = cue.instruction;
+  $('#lesson-explanation').textContent = cue.explanation;
+  $('#lesson-guide').dataset.action = cue.action || '';
 }
 function rankList(target: HTMLElement, rows: Ranking[], emptyCopy: string): void {
   target.replaceChildren();
@@ -204,48 +226,49 @@ async function refreshRankings(): Promise<void> {
   rankList($('#ranking-preview'), entries.slice(0, 5), empty);
   rankList($('#ranking-full'), entries, empty);
 }
-async function startRun(): Promise<void> {
+async function startRun(lesson = false): Promise<void> {
   if (starting || deleting || !scene) return;
   let name: string;
   try { name = normalizeName($<HTMLInputElement>('#player-name').value); } catch (error) { $('#name-error').textContent = (error as Error).message; return; }
-  sound.stop(); sound.unlock(); sound.prepare(ruleMode(mode));
+  const runMode: Mode = lesson ? 'practice' : ruleMode(mode);
+  sound.stop(); sound.unlock(); sound.prepare(runMode);
   $('#name-error').textContent = ''; starting = true;
   submissionSequence++;
-  document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], #result-home, #journey-open, #missions-open, #stage-select, #next-stage').forEach(button => { button.disabled = true; });
+  document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], #result-home, #journey-open, #missions-open, #stage-select, #next-stage, #lesson-start').forEach(button => { button.disabled = true; });
   $<HTMLInputElement>('#player-name').disabled = true;
   $('#start-button').textContent = '계단을 준비하고 있어요…';
   $<HTMLButtonElement>('#start-button').disabled = true;
   $<HTMLButtonElement>('#retry-button').disabled = true;
   runProfile = selectProfile(name); updateProfile();
   if (mode === 'adventure' && !progressStore.isStageUnlocked(runProfile.id, selectedStage)) selectedStage = ADVENTURE_STAGES[0].id;
-  currentRun = { id: createProgressRunId(), mode, dateKey: seoulDateKey(), stageId: mode === 'adventure' ? selectedStage : undefined, stars: 0, awards: [], closed: false, stored: true, dailyBestAtStart: progressStore.get(runProfile.id).daily.best };
+  currentRun = { id: createProgressRunId(), lesson, mode: lesson ? 'practice' : mode, dateKey: seoulDateKey(), stageId: mode === 'adventure' ? selectedStage : undefined, stars: 0, awards: [], closed: false, stored: true, dailyBestAtStart: progressStore.get(runProfile.id).daily.best };
   ticket = undefined;
-  if (mode === 'challenge') {
+  if (!lesson && mode === 'challenge') {
     try { ticket = await api.start(runProfile.id, name); }
     catch { toast('연결이 어려워요. 이번 기록은 이 기기에 저장할게요.'); }
   }
   const stage = selectedAdventure();
-  const seed = mode === 'daily' ? dailySeed(currentRun.dateKey) : mode === 'adventure' ? stage.seed : ticket?.seed ?? crypto.getRandomValues(new Uint32Array(1))[0];
-  scene.startRun(seed, ruleMode(mode), {
-    ...(mode === 'adventure' ? { world: stage.worldId, goal: stage.goal, mistakeLimit: 3 } : mode === 'daily' ? { goal: 150 } : {}),
+  const seed = lesson ? STAIRS_LESSON.seed : mode === 'daily' ? dailySeed(currentRun.dateKey) : mode === 'adventure' ? stage.seed : ticket?.seed ?? crypto.getRandomValues(new Uint32Array(1))[0];
+  scene.startRun(seed, runMode, {
+    ...(lesson ? STAIRS_LESSON.options : mode === 'adventure' ? { world: stage.worldId, goal: stage.goal, mistakeLimit: 3 } : mode === 'daily' ? { goal: 150 } : {}),
     companion: progressStore.get(runProfile.id).equippedCompanion,
-    starOffset: progressStore.get(runProfile.id).totalStairs % 10,
+    starOffset: lesson ? 0 : progressStore.get(runProfile.id).totalStairs % 10,
   }); setScreen('playing');
   $<HTMLInputElement>('#player-name').blur();
-  $('#mode-badge').textContent = { practice: '☁ 연습', challenge: '⚡ 무한 도전', adventure: '🗺️ 세계 모험', daily: '☀️ 오늘의 계단' }[mode];
-  $('#score-unit').textContent = mode === 'adventure' ? `/ ${stage.goal} 계단` : mode === 'daily' ? '/ 150 계단' : '계단';
-  $('#below-game').textContent = ruleMode(mode) === 'practice' ? '다음 계단 힌트를 보고 천천히 올라가요.' : '반대쪽 계단이 보이면 방향 바꾸기!';
-  $('#energy-fill').parentElement!.classList.toggle('practice-energy', ruleMode(mode) === 'practice');
-  $('#step-hint').hidden = ruleMode(mode) !== 'practice';
+  $('#mode-badge').textContent = lesson ? '🎓 조작 교실' : { practice: '☁ 연습', challenge: '⚡ 무한 도전', adventure: '🗺️ 세계 모험', daily: '☀️ 오늘의 계단' }[mode];
+  $('#score-unit').textContent = lesson ? `/ ${STAIRS_LESSON.goal} 계단` : mode === 'adventure' ? `/ ${stage.goal} 계단` : mode === 'daily' ? '/ 150 계단' : '계단';
+  $('#below-game').textContent = lesson ? '반짝이는 버튼을 눌러 두 가지 조작을 배워요. 틀려도 괜찮아요!' : runMode === 'practice' ? '다음 계단 힌트를 보고 천천히 올라가요.' : '반대쪽 계단이 보이면 방향 바꾸기!';
+  $('#energy-fill').parentElement!.classList.toggle('practice-energy', runMode === 'practice');
+  $('#step-hint').hidden = lesson || runMode !== 'practice';
   starting = false;
-  document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], #result-home, #journey-open, #missions-open, #stage-select, #next-stage').forEach(button => { button.disabled = false; });
+  document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], #result-home, #journey-open, #missions-open, #stage-select, #next-stage, #lesson-start').forEach(button => { button.disabled = false; });
   $<HTMLInputElement>('#player-name').disabled = false;
   $('#start-button').innerHTML = '올라가 볼까? <span>↗</span>';
   $<HTMLButtonElement>('#start-button').disabled = false;
   $<HTMLButtonElement>('#retry-button').disabled = false;
-  sound.playMusic(ruleMode(mode)); sound.tone('step');
+  sound.playMusic(runMode); sound.tone('step');
   if (document.hidden || !document.hasFocus()) pause();
-  message(mode === 'adventure' ? `${stage.title}, 출발!` : mode === 'practice' ? '시간 걱정 없이, 천천히 올라가요!' : mode === 'daily' ? '오늘은 같은 길, 나만의 최고에 도전!' : '오른쪽부터! 오르기를 눌러봐요.');
+  message(lesson ? '반짝이는 오르기 버튼부터 눌러 봐요!' : mode === 'adventure' ? `${stage.title}, 출발!` : mode === 'practice' ? '시간 걱정 없이, 천천히 올라가요!' : mode === 'daily' ? '오늘은 같은 길, 나만의 최고에 도전!' : '오른쪽부터! 오르기를 눌러봐요.');
 }
 async function endRun(result: RunResult): Promise<void> {
   if (!runProfile) return;
@@ -254,6 +277,23 @@ async function endRun(result: RunResult): Promise<void> {
   const runTicket = ticket;
   const playedMode = currentRun?.mode || mode;
   const oldDailyBest = currentRun?.dailyBestAtStart || 0;
+  if (isLesson()) {
+    if (currentRun) currentRun.closed = true;
+    setScreen('result');
+    $('#result-score').textContent = result.score.toLocaleString();
+    $('#result-kicker').textContent = '조작 교실 졸업! 🎓';
+    $('#result-copy').textContent = '오르기와 방향 바꾸기를 모두 배웠어요. 이제 모험을 떠나 볼까요?';
+    $('#result-rewards').textContent = '🎓 12계단을 끝까지 올라왔어요!';
+    $('#result-best-label').textContent = '오늘 배운 두 버튼';
+    $('#result-best').textContent = '오르기 · 방향 바꾸기';
+    $('#save-status').textContent = '언제든 교실에서 천천히 다시 배울 수 있어요.';
+    $('#next-stage').textContent = '세계 모험 떠나기 ↗';
+    $('#next-stage').hidden = false;
+    $('#retry-button').textContent = '교실 다시 하기';
+    $('#retry-button').classList.add('secondary-retry');
+    sound.tone('record');
+    return;
+  }
   saveJourney(true);
   const normalMode = playedMode === 'challenge' || playedMode === 'practice';
   const { newBest, stored } = normalMode ? rememberScore(profile, result.mode, result.score) : { newBest: playedMode === 'daily' && result.score > oldDailyBest, stored: currentRun?.stored ?? false };
@@ -266,6 +306,8 @@ async function endRun(result: RunResult): Promise<void> {
   $('#result-best-label').textContent = playedMode === 'adventure' ? '완주한 모험' : playedMode === 'daily' ? `${currentRun?.dateKey.slice(5)} 최고` : '나의 최고';
   $('#result-best').textContent = playedMode === 'adventure' ? `${progressStore.get(profile.id).completedStages.length} / 5` : `${playedMode === 'daily' ? Math.max(oldDailyBest, result.score) : result.mode === 'practice' ? profile.practiceBest : profile.best} 계단`;
   $('#save-status').textContent = stored && currentRun?.stored ? normalMode ? '기록과 모은 별을 이 기기에 저장했어요.' : '모험 기록은 이 브라우저에 저장했어요.' : '브라우저 저장 공간을 사용할 수 없어요.';
+  $('#next-stage').textContent = '다음 모험으로 ↗';
+  $('#retry-button').innerHTML = '한 번 더! <span>↗</span>';
   const stageIndex = ADVENTURE_STAGES.findIndex(stage => stage.id === currentRun?.stageId);
   $('#next-stage').hidden = !cleared || stageIndex >= ADVENTURE_STAGES.length - 1;
   $('#retry-button').classList.toggle('secondary-retry', !$('#next-stage').hidden);
@@ -287,7 +329,7 @@ function pause(): void {
 }
 function home(): void {
   if (currentRun && !currentRun.closed) {
-    if (runProfile && currentRun.mode === 'practice') rememberScore(runProfile, 'practice', scene.getProgress().score);
+    if (runProfile && !currentRun.lesson && currentRun.mode === 'practice') rememberScore(runProfile, 'practice', scene.getProgress().score);
     saveJourney(true);
   }
   currentRun = undefined;
@@ -301,10 +343,12 @@ function openDialog(id: string): void { pause(); $<HTMLDialogElement>(id).showMo
 function act(action: Action): void { if (screen === 'playing') scene.act(action); }
 
 $('#start-form').addEventListener('submit', event => { event.preventDefault(); void startRun(); });
-$('#retry-button').addEventListener('click', () => void startRun());
+$('#lesson-start').addEventListener('click', () => void startRun(true));
+$('#retry-button').addEventListener('click', () => void startRun(isLesson()));
 $('#result-home').addEventListener('click', home);
 $('#pause-home').addEventListener('click', home);
 $('#next-stage').addEventListener('click', () => {
+  if (isLesson()) { chooseMode('adventure', ADVENTURE_STAGES[0].id); void startRun(); return; }
   const index = ADVENTURE_STAGES.findIndex(stage => stage.id === currentRun?.stageId);
   const next = ADVENTURE_STAGES[index + 1];
   if (next) { chooseMode('adventure', next.id); void startRun(); }
@@ -413,10 +457,11 @@ createGame($('#game-canvas'), {
   progress: detail => {
     const world = worldById(detail.worldId);
     $('#world-label').textContent = `${world.icon} ${world.name}`;
-    $('#run-combo').textContent = mode === 'adventure' ? `${'♥'.repeat(detail.mistakesLeft ?? 3)}${'♡'.repeat(detail.mistakes)}` : `${detail.combo} 연속`;
-    $('#run-stars').textContent = `✦ ${detail.collected}`;
+    $('#run-combo').textContent = isLesson() ? '천천히 배워요' : mode === 'adventure' ? `${'♥'.repeat(detail.mistakesLeft ?? 3)}${'♡'.repeat(detail.mistakes)}` : `${detail.combo} 연속`;
+    $('#run-stars').textContent = isLesson() ? `🎓 ${Math.min(detail.score, STAIRS_LESSON.goal)}/${STAIRS_LESSON.goal}` : `✦ ${detail.collected}`;
     $('#step-hint').textContent = detail.nextAction === 'turn' ? '↶ 다음은 방향 바꾸기' : '↑ 다음은 오르기';
     $('#step-hint').dataset.action = detail.nextAction;
+    updateLessonGuide();
     document.querySelector('.game-shell')!.setAttribute('data-world', detail.worldId);
     if (currentRun) {
       if (currentRun.world && currentRun.world !== detail.worldId) message(`${world.icon} ${world.name}에 도착했어요!`);
@@ -430,4 +475,5 @@ createGame($('#game-canvas'), {
   scene.setCompanion(progressStore.get(activeProfile()?.id || 'preview').equippedCompanion);
   $('#start-button').innerHTML = '올라가 볼까? <span>↗</span>';
   $<HTMLButtonElement>('#start-button').disabled = false;
+  $<HTMLButtonElement>('#lesson-start').disabled = false;
 }).catch(() => { $('#start-button').textContent = '새로고침해서 다시 시작해 주세요'; });

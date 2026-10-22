@@ -2,6 +2,8 @@ import type { MiniAction, MiniOptions, MiniSession, MiniStatus } from './mini-ty
 
 export const SPACE_DURATION_MS = 54_000;
 export const SPACE_LOOKAHEAD_MS = 6_000;
+export const SPACE_SIGNAL_RANGE_MS = 1_000;
+export const SPACE_SIGNAL_CHARGES = 3;
 export type SpaceObject = {
   id: number;
   wave: number;
@@ -54,6 +56,9 @@ export class SpaceSession implements MiniSession {
   rescued = 0;
   stars = 0;
   bumps = 0;
+  signalsRemaining = SPACE_SIGNAL_CHARGES;
+  signalledRescues = 0;
+  signalRescue: { variant: number; lane: number; arrivalAt: number; startedAt: number } | undefined;
   finished = false;
   shieldUntil = 0;
   private feedback = '';
@@ -71,11 +76,33 @@ export class SpaceSession implements MiniSession {
   get nextFriend(): SpaceObject | undefined {
     return this.objects.find(object => object.kind === 'friend' && object.outcome === 'pending');
   }
+  get signalTarget(): SpaceObject | undefined {
+    return this.objects.find(object => object.kind === 'friend' && object.outcome === 'pending'
+      && object.arrivalAt >= this.elapsed - 1e-6 && object.arrivalAt - this.elapsed <= SPACE_SIGNAL_RANGE_MS + 1e-6
+      && Math.abs(object.lane - this.lane) <= 1.1);
+  }
 
   act(action: MiniAction): void {
     if (this.finished) return;
     if (action === 'left') this.targetLane = Math.max(0, this.targetLane - 1);
     if (action === 'right') this.targetLane = Math.min(2, this.targetLane + 1);
+    if (action === 'signal') {
+      if (this.signalsRemaining <= 0) {
+        this.announce('구조 신호를 다 썼어. 별길을 따라 친구를 만나자!', 1_500);
+        return;
+      }
+      const target = this.signalTarget;
+      if (!target) {
+        this.announce('친구가 우주선 가까이 오면 구조 신호를 보내요!', 1_300);
+        return;
+      }
+      target.outcome = 'collected';
+      this.signalsRemaining--;
+      this.signalledRescues++;
+      this.rescued++;
+      this.signalRescue = { variant: target.variant, lane: target.lane, arrivalAt: target.arrivalAt, startedAt: this.elapsed };
+      this.announce(`구조 신호 도착! 친구가 왔어 · ${this.signalsRemaining}번 남음`, 1_600);
+    }
   }
 
   advance(deltaMs: number): void {
@@ -138,7 +165,7 @@ export class SpaceSession implements MiniSession {
       stars: this.stars,
       progress: Math.min(1, this.elapsed / this.duration),
       label: `${Math.ceil(Math.max(0, this.duration - this.elapsed) / 1000)}초`,
-      detail: `친구 ${this.rescued}명 / ${totalFriends}명 · 별 ${this.stars}개`,
+      detail: `친구 ${this.rescued}명 / ${totalFriends}명 · 신호 ${this.signalsRemaining}번${this.signalsRemaining > 0 && this.signalTarget ? ' · 지금 구조 가능!' : ''}`,
       finished: this.finished,
       won: this.finished && this.rescued >= 3,
       summary: this.rescued >= 3
@@ -146,6 +173,11 @@ export class SpaceSession implements MiniSession {
         : `우주 정거장 도착! 친구 ${this.rescued}명과 별 ${this.stars}개를 만났어. 다음 탐험에서는 친구 3명 구조에 도전하자!`,
       feedback: this.elapsed < this.feedbackUntil ? this.feedback : undefined,
       mistakes: this.bumps,
+      objectives: [
+        { id: 'arrive', label: '우주 정거장 도착', done: this.finished },
+        { id: 'rescue', label: '친구 6명 구조하기', done: this.rescued >= 6 },
+        { id: 'captain', label: '친구 10명 구조하기', done: this.rescued >= 10 },
+      ],
     };
   }
 }

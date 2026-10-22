@@ -1,5 +1,6 @@
 export type KartTheme = 'meadow' | 'sunset' | 'snow';
 export type KartVehicle = 'kart' | 'firetruck' | 'dino' | 'space';
+export type KartDifficulty = 'easy' | 'normal';
 export type KartProgress = {
   elapsed: number;
   duration: number;
@@ -8,8 +9,11 @@ export type KartProgress = {
   bumps: number;
   lane: number;
   slowed: boolean;
+  difficulty: KartDifficulty;
+  shield: boolean;
+  saves: number;
 };
-export type KartResult = { stars: number; bumps: number; elapsed: number };
+export type KartResult = { stars: number; bumps: number; elapsed: number; difficulty: KartDifficulty; saves: number };
 export type KartObject = {
   id: number;
   row: number;
@@ -19,7 +23,7 @@ export type KartObject = {
   resolved: boolean;
 };
 export type KartRow = { distance: number; safeLane: number; obstacleLanes: number[] };
-export type KartEvent = { kind: 'star' | 'bump'; object: KartObject };
+export type KartEvent = { kind: 'star' | 'bump' | 'block'; object: KartObject; shieldEarned?: boolean };
 
 export const KART_DURATION_MS = 60_000;
 export const KART_VIEW_DISTANCE = 1_350;
@@ -28,7 +32,7 @@ const PHYSICS_STEP_MS = 1000 / 120;
 const CONTACT_DISTANCE = 24;
 
 /** A seeded route keeps the next safe lane within one turn of the previous one. */
-export function makeKartCourse(seed: number): { objects: KartObject[]; rows: KartRow[] } {
+export function makeKartCourse(seed: number, difficulty: KartDifficulty = 'normal'): { objects: KartObject[]; rows: KartRow[] } {
   let state = (Number.isFinite(seed) ? Math.floor(seed) : 73129) >>> 0;
   const random = (): number => {
     state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
@@ -36,13 +40,13 @@ export function makeKartCourse(seed: number): { objects: KartObject[]; rows: Kar
   };
   const objects: KartObject[] = [], rows: KartRow[] = [];
   let safeLane = 1;
-  for (let row = 0, distance = 760; distance < 16_000; row++, distance += 450) {
+  for (let row = 0, distance = 760; distance < 16_000; row++, distance += difficulty === 'easy' ? 525 : 450) {
     if (row > 0) {
       const choices = [safeLane - 1, safeLane, safeLane + 1].filter(lane => lane >= 0 && lane <= 2);
       safeLane = choices[Math.floor(random() * choices.length)];
     }
     const otherLanes = [0, 1, 2].filter(lane => lane !== safeLane);
-    const obstacleLanes = row < 3 || random() < .4 ? [otherLanes[Math.floor(random() * 2)]] : otherLanes;
+    const obstacleLanes = difficulty === 'easy' || row < 3 || random() < .4 ? [otherLanes[Math.floor(random() * 2)]] : otherLanes;
     rows.push({ distance, safeLane, obstacleLanes });
     for (const lane of obstacleLanes) {
       const kind = (['cone', 'hay', 'puddle'] as const)[Math.floor(random() * 3)];
@@ -68,19 +72,21 @@ export class KartSession {
   targetLane = 1;
   stars = 0;
   bumps = 0;
+  shield = false;
+  saves = 0;
   paused = false;
   finished = false;
   private slowedUntil = 0;
   private protectedUntil = 0;
 
-  constructor(seed = 73129) {
-    const course = makeKartCourse(seed);
+  constructor(seed = 73129, readonly difficulty: KartDifficulty = 'normal') {
+    const course = makeKartCourse(seed, difficulty);
     this.objects = course.objects;
     this.rows = course.rows;
   }
 
   get slowed(): boolean { return this.elapsed < this.slowedUntil; }
-  get speed(): number { return (174 + 52 * this.elapsed / this.duration) * (this.slowed ? .53 : 1); }
+  get speed(): number { return (174 + 52 * this.elapsed / this.duration) * (this.difficulty === 'easy' ? .74 : 1) * (this.slowed ? .53 : 1); }
 
   move(direction: -1 | 1): void {
     if (this.paused || this.finished) return;
@@ -110,12 +116,20 @@ export class KartSession {
         object.resolved = true;
         if (object.kind === 'star') {
           this.stars++;
-          events.push({ kind: 'star', object });
+          const shieldEarned = this.stars % 10 === 0 && !this.shield;
+          if (shieldEarned) this.shield = true;
+          events.push({ kind: 'star', object, shieldEarned });
         } else if (this.elapsed >= this.protectedUntil) {
-          this.bumps++;
-          this.slowedUntil = this.elapsed + 1100;
           this.protectedUntil = this.elapsed + 900;
-          events.push({ kind: 'bump', object });
+          if (this.shield) {
+            this.shield = false;
+            this.saves++;
+            events.push({ kind: 'block', object });
+          } else {
+            this.bumps++;
+            this.slowedUntil = this.elapsed + 1100;
+            events.push({ kind: 'bump', object });
+          }
         }
       }
       remaining -= delta;
@@ -132,8 +146,9 @@ export class KartSession {
       elapsed: this.elapsed / 1000, duration: this.duration / 1000,
       progress: this.elapsed / this.duration, stars: this.stars, bumps: this.bumps,
       lane: this.lane, slowed: this.slowed,
+      difficulty: this.difficulty, shield: this.shield, saves: this.saves,
     };
   }
 
-  getResult(): KartResult { return { stars: this.stars, bumps: this.bumps, elapsed: this.elapsed / 1000 }; }
+  getResult(): KartResult { return { stars: this.stars, bumps: this.bumps, elapsed: this.elapsed / 1000, difficulty: this.difficulty, saves: this.saves }; }
 }

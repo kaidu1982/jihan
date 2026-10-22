@@ -135,6 +135,12 @@ function drawMaze(ctx: CanvasRenderingContext2D, rawSession: MiniSession, frame:
   }
   const center = (point: { x: number; y: number }): [number, number] => [left + (point.x + .5) * tile, top + (point.y + .5) * tile];
   const [startX, startY] = center(maze.start);
+  if (session.trailVisible) for (const point of session.visited) {
+    const [x, y] = point.split(',').map(Number);
+    const [cx, cy] = center({ x, y });
+    circle(ctx, cx - tile * .09, cy + tile * .07, tile * .065, '#9dba9988');
+    circle(ctx, cx + tile * .09, cy - tile * .07, tile * .065, '#9dba9988');
+  }
   circle(ctx, startX, startY, tile * .26, '#c4dda4');
   ctx.fillStyle = '#76a566'; ctx.font = `700 ${tile * .24}px system-ui`; ctx.textAlign = 'center'; ctx.fillText('집', startX, startY + tile * .09);
   const motion = frame.reducedMotion ? 0 : Math.sin(session.elapsed / 300) * 2;
@@ -155,7 +161,7 @@ function drawMaze(ctx: CanvasRenderingContext2D, rawSession: MiniSession, frame:
   if (!session.hasKey) drawKey(ctx, keyX, keyY, tile * .75, motion);
   const [chestX, chestY] = center(maze.chest);
   drawChest(ctx, chestX, chestY, tile * .85, session.finished, session.hasKey);
-  const movement = frame.reducedMotion ? 1 : Math.min(1, session.movementAge / 85);
+  const movement = frame.reducedMotion || session.finished ? 1 : Math.min(1, session.movementAge / 85);
   const eased = 1 - (1 - movement) ** 2;
   const visual = { x: session.previousPosition.x + (session.position.x - session.previousPosition.x) * eased, y: session.previousPosition.y + (session.position.y - session.previousPosition.y) * eased };
   const [playerX, playerY] = center(visual);
@@ -181,7 +187,7 @@ const maze: MiniGameDefinition = {
   instructions: [
     { icon: '👆', title: '한 칸씩 움직여요', copy: '방향 버튼이나 키보드 방향키로 정원 길을 걸어요.' },
     { icon: '🔑', title: '열쇠를 먼저 찾아요', copy: '황금 열쇠를 주운 뒤 보물상자에 도착하면 성공!' },
-    { icon: '✨', title: '힌트는 언제든지', copy: '길이 헷갈리면 반짝이는 발자국을 따라가요. 별은 줄지 않아요.' },
+    { icon: '👣', title: '지나온 길을 기억해요', copy: '발자국을 켜고 끌 수 있어요. 길이 헷갈리면 무료 힌트를 눌러봐요.' },
   ],
   controls: [
     { action: 'up', label: '위로', icon: '↑', keys: ['ArrowUp', 'KeyW'] },
@@ -189,6 +195,7 @@ const maze: MiniGameDefinition = {
     { action: 'down', label: '아래로', icon: '↓', keys: ['ArrowDown', 'KeyS'] },
     { action: 'right', label: '오른쪽', icon: '→', keys: ['ArrowRight', 'KeyD'] },
     { action: 'hint', label: '길 힌트', icon: '✨', keys: ['KeyH'] },
+    { action: 'trail', label: '발자국', icon: '👣', keys: ['KeyT'] },
   ],
   stages: [
     { name: '꽃잎 정원', icon: '🌼', copy: '작은 7칸 정원 · 보석 3개' },

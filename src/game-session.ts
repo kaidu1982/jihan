@@ -1,7 +1,7 @@
 import { INITIAL_ENERGY, MAX_ENERGY, MAX_STEPS, MIN_STEP_MS, makeSteps, stepEnergy, type Action, type Direction, type InputEvent, type Mode } from '../functions/src/shared/rules';
 import type { CompanionId, WorldId } from './content';
 
-export type RunOptions = { world?: WorldId; goal?: number; mistakeLimit?: number; companion?: CompanionId; starOffset?: number };
+export type RunOptions = { world?: WorldId; goal?: number; mistakeLimit?: number; companion?: CompanionId; starOffset?: number; collectStars?: boolean };
 export type RunProgress = { score: number; worldId: WorldId; combo: number; maxCombo: number; mistakes: number; mistakesLeft?: number; collected: number; nextAction: Action };
 export type RunResult = { score: number; inputs: InputEvent[]; reason: 'wrong' | 'time' | 'finished'; mode: Mode; mistakes: number; maxCombo: number; collected: number };
 export type StepOutcome = 'blocked' | 'mistake' | 'step';
@@ -16,6 +16,7 @@ export class StairSession {
   readonly steps;
   readonly goal: number;
   readonly starOffset: number;
+  readonly collectStars: boolean;
   readonly mistakeLimit?: number;
   score = 0;
   facing: Direction = 1;
@@ -32,6 +33,7 @@ export class StairSession {
     this.steps = makeSteps(seed);
     this.goal = Number.isFinite(options.goal) ? Math.max(1, Math.min(MAX_STEPS, Math.floor(options.goal!))) : MAX_STEPS;
     this.starOffset = Number.isFinite(options.starOffset) ? Math.max(0, Math.floor(options.starOffset!)) % 10 : 0;
+    this.collectStars = options.collectStars !== false;
     this.mistakeLimit = mode === 'practice' && Number.isFinite(options.mistakeLimit)
       ? Math.max(1, Math.floor(options.mistakeLimit!)) : undefined;
   }
@@ -66,17 +68,19 @@ export class StairSession {
     return 'step';
   }
 
+  get collected(): number { return this.collectStars ? Math.floor((this.score + this.starOffset) / 10) : 0; }
+
   getProgress(): RunProgress {
     return {
       score: this.score, worldId: this.options.world ?? worldForScore(this.score),
       combo: this.combo, maxCombo: this.maxCombo, mistakes: this.mistakes,
       mistakesLeft: this.mistakeLimit === undefined ? undefined : Math.max(0, this.mistakeLimit - this.mistakes),
-      collected: Math.floor((this.score + this.starOffset) / 10),
+      collected: this.collected,
       nextAction: this.steps[this.score + 1].direction === this.facing ? 'climb' : 'turn',
     };
   }
 
   getResult(): RunResult {
-    return { score: this.score, inputs: [...this.inputs], reason: this.reason ?? 'finished', mode: this.mode, mistakes: this.mistakes, maxCombo: this.maxCombo, collected: Math.floor((this.score + this.starOffset) / 10) };
+    return { score: this.score, inputs: [...this.inputs], reason: this.reason ?? 'finished', mode: this.mode, mistakes: this.mistakes, maxCombo: this.maxCombo, collected: this.collected };
   }
 }

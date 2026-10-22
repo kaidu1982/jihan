@@ -108,6 +108,9 @@ export class MazeSession implements MiniSession {
   hasKey = false;
   finished = false;
   readonly collectedGems = new Set<string>();
+  readonly visited = new Set<string>();
+  readonly minimumSteps: number;
+  trailVisible = true;
   hintPath: MazePoint[] = [];
   feedback = '반짝이는 열쇠를 찾아보자!';
   private feedbackUntil = 0;
@@ -119,6 +122,8 @@ export class MazeSession implements MiniSession {
     this.maze = makeMaze(options.seed ?? 14739, this.level);
     this.position = { ...this.maze.start };
     this.previousPosition = { ...this.position };
+    this.visited.add(pointId(this.position));
+    this.minimumSteps = getMazePath(this.maze, this.maze.start, this.maze.key).length + getMazePath(this.maze, this.maze.key, this.maze.chest).length - 2;
   }
 
   advance(deltaMs: number): void {
@@ -141,14 +146,23 @@ export class MazeSession implements MiniSession {
     this.feedbackUntil = this.elapsed + 2600;
   }
 
+  private hintMessage(): string {
+    const next = this.hintPath[1];
+    const direction = next ? next.x > this.position.x ? '오른쪽' : next.x < this.position.x ? '왼쪽' : next.y > this.position.y ? '아래쪽' : '위쪽' : '';
+    return direction ? `다음은 ${direction}이에요. 반짝이는 발자국을 따라가 봐!` : '목표에 도착했어요!';
+  }
+
   act(action: MiniAction): void {
     if (this.finished) return;
+    if (action === 'trail') {
+      this.trailVisible = !this.trailVisible;
+      this.say(this.trailVisible ? '내가 지나온 길에 발자국이 보여요!' : '발자국을 잠시 숨겼어요. 다시 누르면 보여요.');
+      return;
+    }
     if (action === 'hint') {
       this.hintPath = getMazePath(this.maze, this.position, this.hasKey ? this.maze.chest : this.maze.key).slice(0, 5);
       this.hintUntil = this.elapsed + 5000;
-      const next = this.hintPath[1];
-      const direction = next ? next.x > this.position.x ? '오른쪽' : next.x < this.position.x ? '왼쪽' : next.y > this.position.y ? '아래쪽' : '위쪽' : '';
-      this.say(direction ? `다음은 ${direction}이에요. 반짝이는 발자국을 따라가 봐!` : '목표에 도착했어요!');
+      this.say(this.hintMessage());
       return;
     }
     const delta = DIRECTIONS[action];
@@ -160,10 +174,12 @@ export class MazeSession implements MiniSession {
     }
     this.previousPosition = { ...this.position };
     this.position = next;
+    this.visited.add(pointId(next));
     this.movementAge = 0;
     this.steps++;
     if (this.hintPath.length) {
       this.hintPath = getMazePath(this.maze, this.position, this.hasKey ? this.maze.chest : this.maze.key).slice(0, 5);
+      if (this.feedback.startsWith('다음은')) this.say(this.hintMessage());
     }
     if (this.maze.gems.some(gem => sameMazePoint(gem, next)) && !this.collectedGems.has(pointId(next))) {
       this.collectedGems.add(pointId(next));
@@ -196,6 +212,11 @@ export class MazeSession implements MiniSession {
       finished: this.finished, won: this.finished,
       summary: this.finished ? `${this.steps}걸음으로 보물을 찾았어! 보석 ${this.collectedGems.size}개와 완주 별 5개를 모았어.` : '시간 제한 없이 천천히 탐험해요.',
       feedback: this.feedback,
+      objectives: [
+        { id: 'treasure', label: '보물 찾기', done: this.finished },
+        { id: 'gems', label: `보석 ${this.maze.gems.length}개`, done: this.collectedGems.size === this.maze.gems.length },
+        { id: 'shortest', label: `${this.minimumSteps}걸음 완주`, done: this.finished && this.steps === this.minimumSteps },
+      ],
     };
   }
 }

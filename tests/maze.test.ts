@@ -151,3 +151,36 @@ test('the maze definition supplies complete stages, characters and every directi
   for (const action of ['up', 'down', 'left', 'right', 'hint']) assert.ok(mazeDefinition.controls.some(control => control.action === action));
   assert.ok(mazeDefinition.create({ seed: 0, level: 0, character: 'child' }) instanceof MazeSession);
 });
+test('footprints remember valid visits and toggling them never moves or rewards the explorer', () => {
+  const run = new MazeSession({ seed: 312 });
+  assert.deepEqual([...run.visited], ['1,1']);
+  run.act('up'); assert.equal(run.visited.size, 1);
+  const next = getMazePath(run.maze, run.position, run.maze.key)[1];
+  run.act(direction(run.position, next));
+  assert.ok(run.visited.has(`${next.x},${next.y}`));
+  const status = run.getStatus(), position = { ...run.position };
+  run.act('trail'); assert.equal(run.trailVisible, false);
+  run.act('trail'); assert.equal(run.trailVisible, true);
+  assert.equal(run.steps, status.score); assert.equal(run.stars, status.stars); assert.deepEqual(run.position, position);
+});
+test('each garden can earn all medals with free hints; detours only miss the shortest-route goal', () => {
+  for (let level = 0; level < 3; level++) {
+    const run = new MazeSession({ seed: 312, level });
+    run.act('hint'); walk(run, run.maze.key); walk(run, run.maze.chest);
+    assert.equal(run.steps, run.minimumSteps);
+    assert.ok(run.getStatus().objectives!.every(item => item.done));
+    const detour = new MazeSession({ seed: 312, level });
+    const start = { ...detour.position }, next = getMazePath(detour.maze, start, detour.maze.key)[1];
+    detour.act(direction(start, next)); detour.act(direction(next, start));
+    walk(detour, detour.maze.key); walk(detour, detour.maze.chest);
+    assert.deepEqual(detour.getStatus().objectives!.map(item => item.done), [true, true, false]);
+  }
+});
+test('a visible directional hint follows a corner instead of keeping the previous direction', () => {
+  const run = new MazeSession({ seed: 0, level: 2 });
+  run.act('hint'); assert.match(run.feedback, /다음은 오른쪽/);
+  run.act('right'); run.act('right');
+  assert.deepEqual(run.position, { x: 3, y: 1 });
+  assert.deepEqual(run.hintPath[1], { x: 3, y: 2 });
+  assert.match(run.feedback, /다음은 아래쪽/);
+});

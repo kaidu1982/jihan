@@ -51,6 +51,9 @@ export class DinoSession implements MiniSession {
   velocity = 0;
   stars = 0;
   mistakes = 0;
+  clearedObstacles = 0;
+  jumpsUsed = 0;
+  jumpBurstUntil = 0;
   finished = false;
   private slowUntil = 0;
   private protectedUntil = 0;
@@ -69,12 +72,20 @@ export class DinoSession implements MiniSession {
   get protected(): boolean { return this.elapsed < this.protectedUntil; }
   get speed(): number { return this.slowed ? DINO_SPEED * .6 : DINO_SPEED; }
   get grounded(): boolean { return this.height <= .001 && this.velocity <= 0; }
+  get jumpsRemaining(): number { return this.grounded ? 2 : Math.max(0, 2 - this.jumpsUsed); }
   get nextObstacle(): DinoObstacle | undefined {
     return this.obstacles.find(obstacle => !obstacle.resolved && obstacle.x + obstacle.width / 2 >= this.distance - 20);
   }
 
   act(action: MiniAction): void {
-    if (this.finished || !this.grounded || (action !== 'jump' && action !== 'up')) return;
+    if (this.finished || (action !== 'jump' && action !== 'up')) return;
+    if (this.grounded) this.jumpsUsed = 1;
+    else if (this.jumpsUsed < 2) {
+      this.jumpsUsed = 2;
+      this.jumpBurstUntil = this.elapsed + 400;
+      this.message = '한 번 더 폴짝! 두 번 점프!';
+      this.feedbackUntil = this.elapsed + 1_000;
+    } else return;
     this.velocity = DINO_JUMP_SPEED;
   }
 
@@ -87,6 +98,7 @@ export class DinoSession implements MiniSession {
     if (obstacle.kind === 'gap') {
       this.height = Math.max(this.height, 24);
       this.velocity = Math.max(this.velocity, 220);
+      this.jumpsUsed = Math.max(1, this.jumpsUsed);
     }
     this.message = obstacle.kind === 'gap' ? '폴짝! 다시 달리면 돼요!' : '앗, 괜찮아! 다시 출발!';
     this.feedbackUntil = this.elapsed + 1_800;
@@ -103,12 +115,16 @@ export class DinoSession implements MiniSession {
       this.distance = Math.min(this.courseLength, this.distance + this.speed * seconds);
       this.height += this.velocity * seconds - .5 * DINO_GRAVITY * seconds * seconds;
       this.velocity -= DINO_GRAVITY * seconds;
-      if (this.height <= 0) { this.height = 0; this.velocity = 0; }
+      if (this.height <= 0) { this.height = 0; this.velocity = 0; this.jumpsUsed = 0; }
 
       for (const obstacle of this.obstacles) {
         if (obstacle.resolved) continue;
         const overlap = obstacle.width / 2 + (obstacle.kind === 'gap' ? -3 : 14);
-        if (this.distance > obstacle.x + overlap) { obstacle.resolved = true; continue; }
+        if (this.distance > obstacle.x + overlap) {
+          obstacle.resolved = true;
+          if (!obstacle.bumped) this.clearedObstacles++;
+          continue;
+        }
         if (Math.abs(this.distance - obstacle.x) > overlap) continue;
         const tooLow = this.height < (obstacle.kind === 'gap' ? 8 : obstacle.height - 4);
         if (tooLow && !this.protected && !obstacle.bumped) this.bump(obstacle);
@@ -138,11 +154,16 @@ export class DinoSession implements MiniSession {
     return {
       score: Math.floor(this.distance / 10), stars: this.stars, progress,
       label: `${Math.ceil(Math.max(0, this.courseLength - this.distance) / DINO_SPEED)}초`,
-      detail: `알 ${this.stars}개 · ${this.slowed ? '다시 힘내는 중!' : this.height > 1 ? '폴짝! 점프 중' : '결승선으로 달려요'}`,
+      detail: `알 ${this.stars}개 · ${this.slowed ? '다시 힘내는 중!' : this.grounded ? '점프 2번 준비!' : `공중 점프 ${this.jumpsRemaining}번 남음`}`,
       finished: this.finished, won: this.finished,
-      summary: `공룡 알 ${this.stars}개를 모아 숲속 길을 완주했어요!`,
+      summary: `공룡 알 ${this.stars}개를 모아 숲속 길을 완주했어요! 장애물 ${this.clearedObstacles}개도 폴짝 넘었어요.`,
       feedback: this.finished || this.elapsed <= this.feedbackUntil || this.elapsed < 3_200 ? this.message : undefined,
       mistakes: this.mistakes,
+      objectives: [
+        { id: 'finish', label: '결승선 도착', done: this.finished },
+        { id: 'eggs', label: '공룡 알 15개 모으기', done: this.stars >= 15 },
+        { id: 'leaps', label: '장애물 8개 넘기', done: this.clearedObstacles >= 8 },
+      ],
     };
   }
 }

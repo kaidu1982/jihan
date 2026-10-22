@@ -1,14 +1,14 @@
 import Phaser from 'phaser';
 import {
   KartSession, KART_VIEW_DISTANCE,
-  type KartObject, type KartProgress, type KartResult, type KartTheme, type KartVehicle,
+  type KartObject, type KartProgress, type KartResult, type KartTheme, type KartVehicle, type KartDifficulty,
 } from './kart-session';
 
-export type { KartProgress, KartResult, KartTheme, KartVehicle } from './kart-session';
-type KartOptions = { theme: KartTheme; vehicle: KartVehicle };
+export type { KartProgress, KartResult, KartTheme, KartVehicle, KartDifficulty } from './kart-session';
+type KartOptions = { theme: KartTheme; vehicle: KartVehicle; difficulty?: KartDifficulty };
 type Callbacks = {
   update(progress: KartProgress): void;
-  event(kind: 'star' | 'bump'): void;
+  event(kind: 'star' | 'bump' | 'shield' | 'block'): void;
   end(result: KartResult): void;
 };
 type Palette = {
@@ -102,7 +102,7 @@ export class KartScene extends Phaser.Scene {
 
   startRun(options: KartOptions & { seed?: number }): void {
     this.options = options;
-    this.session = new KartSession(options.seed ?? Math.floor(Math.random() * 0xffffffff));
+    this.session = new KartSession(options.seed ?? Math.floor(Math.random() * 0xffffffff), options.difficulty);
     this.mode = 'running'; this.paused = false;
     this.resetVisuals();
     this.callbacks.update(this.session.getProgress());
@@ -117,7 +117,7 @@ export class KartScene extends Phaser.Scene {
 
   idle(options: KartOptions): void {
     this.options = options;
-    this.session = new KartSession(73129);
+    this.session = new KartSession(73129, options.difficulty);
     this.mode = 'idle'; this.paused = false;
     this.resetVisuals();
     this.callbacks.update(this.session.getProgress());
@@ -143,7 +143,13 @@ export class KartScene extends Phaser.Scene {
         const position = this.project(event.object.distance - this.session.distance, event.object.lane);
         if (event.kind === 'star') {
           this.burst(position.x, position.y - 10, 7, false);
-          if (this.session.stars % 5 === 0) this.feedback(`별 ${this.session.stars}개! 멋지다!`);
+          if (event.shieldEarned) {
+            this.callbacks.event('shield');
+            this.feedback('별 10개! 방울 보호막 준비!');
+          } else if (this.session.stars % 5 === 0) this.feedback(`별 ${this.session.stars}개! 멋지다!`);
+        } else if (event.kind === 'block') {
+          this.feedback('톡! 보호막이 지켜줬어!');
+          this.burst(position.x, position.y, 11, false, 0xa5f0ef);
         } else {
           this.feedback('괜찮아! 계속 달려 보자');
           this.burst(position.x, position.y, 5, false, 0xf7e6bd);
@@ -201,6 +207,12 @@ export class KartScene extends Phaser.Scene {
     const player = this.project(0, this.session.lane);
     const bounce = this.reducedMotion || this.paused || this.mode === 'stopped' ? 0 : Math.sin(this.visualTime * .014) * 1.2;
     const bank = this.reducedMotion ? 0 : (this.session.targetLane - this.session.lane) * -.12;
+    if (this.session.shield) {
+      const shimmer = this.reducedMotion || this.paused ? 1 : .94 + Math.sin(this.visualTime * .003) * .06;
+      g.fillStyle(0xa6f2ef, .22); g.fillEllipse(player.x, player.y - 9, 77 * player.scale * shimmer, 99 * player.scale * shimmer);
+      g.lineStyle(2.5, 0xe4ffff, .92); g.strokeEllipse(player.x, player.y - 9, 77 * player.scale * shimmer, 99 * player.scale * shimmer);
+      star(g, player.x + 28 * player.scale, player.y - 37 * player.scale, 6 * player.scale, 0xf2ffff);
+    }
     g.fillStyle(p.shadow, .20); g.fillEllipse(player.x + 2, player.y + 18, 49 * player.scale, 22 * player.scale);
     g.save(); g.translateCanvas(player.x, player.y - 7 + bounce); g.rotateCanvas(bank); g.scaleCanvas(player.scale, player.scale);
     if (this.session.slowed) { g.fillStyle(0xffedbb, .23); g.fillEllipse(0, 5, 62, 83); }

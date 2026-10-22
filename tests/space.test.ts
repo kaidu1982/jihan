@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { makeSpaceMission, SPACE_DURATION_MS, SpaceSession } from '../src/space-session';
+import { makeSpaceMission, SPACE_DURATION_MS, SPACE_SIGNAL_CHARGES, SPACE_SIGNAL_RANGE_MS, SpaceSession } from '../src/space-session';
+import space from '../src/space';
 
 const options = (seed = 7123, level = 0) => ({ seed, level, character: 'comet' });
 
@@ -45,8 +46,88 @@ test('the visible star trail is a reachable route to every friend on all planets
       assert.equal(run.stars, 24);
       assert.equal(run.getStatus().won, true);
       assert.equal(run.getStatus().progress, 1);
+      assert.equal(run.signalsRemaining, SPACE_SIGNAL_CHARGES);
+      assert.ok(run.getStatus().objectives?.every(objective => objective.done));
     }
   }
+});
+
+test('a nearby adjacent-lane friend responds to one real signal and cannot be rescued twice', () => {
+  const run = new SpaceSession(options());
+  const friend = run.nextFriend!;
+  const adjacent = friend.lane === 1 ? 0 : 1;
+  while (run.targetLane > adjacent) run.act('left');
+  while (run.targetLane < adjacent) run.act('right');
+  run.advance(friend.arrivalAt - SPACE_SIGNAL_RANGE_MS);
+  assert.equal(run.signalTarget, friend);
+  assert.match(run.getStatus().detail, /지금 구조 가능/);
+  const starsBefore = run.stars;
+  run.act('signal');
+  assert.equal(run.rescued, 1);
+  assert.equal(run.signalledRescues, 1);
+  assert.equal(run.signalsRemaining, 2);
+  assert.equal(friend.outcome, 'collected');
+  assert.equal(run.stars, starsBefore);
+  assert.equal(run.signalRescue?.variant, friend.variant);
+  run.act('signal');
+  assert.equal(run.rescued, 1);
+  assert.equal(run.signalsRemaining, 2);
+  run.advance(SPACE_SIGNAL_RANGE_MS + 500);
+  run.act('signal');
+  assert.equal(run.rescued, 1);
+  assert.equal(run.signalsRemaining, 2);
+});
+
+test('signals have finite time and lane range, with useful feedback and no wasted charge', () => {
+  const run = new SpaceSession(options());
+  const friend = run.nextFriend!;
+  run.act('signal');
+  assert.equal(run.rescued, 0);
+  assert.equal(run.signalsRemaining, 3);
+  assert.match(run.getStatus().feedback ?? '', /가까이/);
+  // Force a two-lane separation to test the rescue radius independently of route luck.
+  friend.lane = 0;
+  run.act('right');
+  run.advance(friend.arrivalAt - SPACE_SIGNAL_RANGE_MS / 2);
+  assert.equal(run.lane, 2);
+  assert.equal(run.signalTarget, undefined);
+  run.act('signal');
+  assert.equal(friend.outcome, 'pending');
+  assert.equal(run.signalsRemaining, 3);
+  run.advance(SPACE_SIGNAL_RANGE_MS);
+  assert.equal(friend.outcome, 'missed');
+  run.act('left'); run.act('left'); run.advance(600);
+  run.act('signal');
+  assert.equal(run.rescued, 0);
+  assert.equal(run.signalsRemaining, 3);
+});
+
+test('only three successful signals are available and exhausted signals cannot collect a friend', () => {
+  const run = new SpaceSession(options());
+  const friends = run.objects.filter(object => object.kind === 'friend');
+  for (let index = 0; index < 4; index++) {
+    const friend = friends[index];
+    run.advance(friend.arrivalAt - run.elapsed - 500);
+    assert.equal(run.signalTarget, friend);
+    const before = run.rescued;
+    run.act('signal');
+    if (index < 3) {
+      assert.equal(run.rescued, before + 1);
+      assert.equal(friend.outcome, 'collected');
+    } else {
+      assert.equal(run.rescued, before);
+      assert.equal(friend.outcome, 'pending');
+      assert.match(run.getStatus().feedback ?? '', /다 썼어/);
+    }
+  }
+  assert.equal(run.signalledRescues, 3);
+  assert.equal(run.signalsRemaining, 0);
+});
+
+test('the space definition exposes the rescue control on touch and Space key', () => {
+  const signal = space.controls.find(control => control.action === 'signal');
+  assert.equal(signal?.label, '구조 신호');
+  assert.ok(signal?.keys.includes('Space'));
 });
 
 test('space interpolation sweeps crossings and collision recovery never ends the journey', () => {
@@ -123,7 +204,7 @@ test('the ship interpolates, stays inside the field, ignores invalid time, and f
   run.advance(SPACE_DURATION_MS);
   const finished = run.getStatus();
   assert.equal(finished.label, '0초');
-  run.act('left'); run.advance(100_000);
+  run.act('left'); run.act('signal'); run.advance(100_000);
   assert.deepEqual(run.getStatus(), finished);
   assert.equal(run.lane, 2);
 });
@@ -137,4 +218,6 @@ test('an unsuccessful rescue mission still arrives with an honest result', () =>
   assert.equal(run.rescued, 0);
   assert.match(run.getStatus().summary, /친구 0명/);
   assert.match(run.getStatus().summary, /다음 탐험/);
+  assert.equal(run.getStatus().objectives?.find(objective => objective.id === 'rescue')?.done, false);
+  assert.equal(run.getStatus().objectives?.find(objective => objective.id === 'captain')?.done, false);
 });

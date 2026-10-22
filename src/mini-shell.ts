@@ -26,7 +26,7 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
   let phase: 'ready' | 'playing' | 'paused' | 'result' = 'ready';
   let session: MiniSession;
   let runId = '', runDriver = driver, lastStatus: MiniStatus | undefined, lastFeedback = '';
-  let stage = 0, character = '', visualTime = 0;
+  let stage = 0, character = '', visualTime = 0, runSeed = 0, goalSignature = '';
   const audio = new GameAudio(); audio.setPreferences(saved.music, saved.sound);
   const header = node('header', 'mini-header');
   const brand = node('a', 'mini-brand'); brand.href = '/'; brand.append(node('span', 'mini-brand-mark', '✦'), node('strong', '', '지한이의 작은 오락실'));
@@ -50,6 +50,7 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
   const collectionButton = button('✦ 수집', 'mini-chip', () => openDialog(collectionDialog));
   const helpButton = button('?', 'mini-chip mini-help', () => openDialog(helpDialog)); helpButton.setAttribute('aria-label', '게임 방법 보기');
   tools.append(stageButton, collectionButton, helpButton); toolbar.append(heading, tools); gameColumn.append(toolbar);
+  const goals = node('div', 'mini-goals'); goals.setAttribute('aria-label', '이번 코스의 세 가지 목표'); gameColumn.append(goals);
   const board = node('div', 'mini-board'); gameColumn.append(board);
   const canvas = node('canvas', 'mini-canvas'); canvas.width = 840; canvas.height = 1120; canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', `${definition.title}. ${definition.description}`); board.append(canvas);
   const context = canvas.getContext('2d');
@@ -117,18 +118,21 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
   const resultDialog = node('dialog', 'mini-dialog mini-result-dialog'); resultDialog.setAttribute('aria-labelledby', 'mini-result-heading');
   const resultHeading = node('h2', '', '멋지게 해냈어!'); resultHeading.id = 'mini-result-heading';
   const resultSummary = node('p', 'mini-result-summary'), resultStars = node('strong', 'mini-result-stars'), resultScore = node('p', 'mini-result-score'), resultSave = node('p', 'mini-result-save');
-  const retryButton = button('한 번 더 놀기 →', 'mini-primary', start);
-  resultDialog.append(node('div', 'mini-dialog-art', '🏅'), resultHeading, resultSummary, resultStars, resultScore, resultSave, retryButton, button('코스 · 친구 고르기', 'mini-secondary', reset)); app.append(resultDialog);
+  const resultMedals = node('p', 'mini-result-medals'), resultGoals = node('ul', 'mini-result-goals');
+  const retryButton = button('같은 길 다시 →', 'mini-primary', () => begin(true));
+  const nextButton = button('다음 코스로 →', 'mini-secondary', () => { store.selectStage(runDriver, definition.id, stage + 1); begin(); });
+  resultDialog.append(node('div', 'mini-dialog-art', '🏅'), resultHeading, resultSummary, resultMedals, resultGoals, resultStars, resultScore, resultSave, retryButton, nextButton, button('새로운 길로 놀기', 'mini-secondary', start), button('코스 · 친구 고르기', 'mini-secondary', reset)); app.append(resultDialog);
   pauseDialog.addEventListener('cancel', event => { event.preventDefault(); resume(); }); resultDialog.addEventListener('cancel', event => { event.preventDefault(); reset(); });
   function openDialog(dialog: HTMLDialogElement): void { pause(); dialog.querySelector<HTMLElement>('.mini-dialog-status')!.textContent = ''; dialog.showModal(); }
   function recordName(): string { try { return normalizeName(nameInput.value); } catch { return driver; } }
   function drawStages(parent: HTMLElement, inDialog = false): void {
-    parent.replaceChildren();
+    parent.replaceChildren(); const record = store.get(recordName(), definition.id);
     (definition.stages || []).forEach((item, index) => {
       const choice = button('', 'mini-stage-choice', () => {
         if (phase !== 'ready') return; stage = index; store.selectStage(recordName(), definition.id, stage); renderChoices(); preview(); if (inDialog) stageDialog.close();
       });
-      choice.disabled = phase !== 'ready'; choice.setAttribute('aria-pressed', String(stage === index)); choice.append(node('span', 'mini-choice-icon', item.icon), node('strong', '', item.name), node('small', '', item.copy)); parent.append(choice);
+      const course = record.stages[String(index)];
+      choice.disabled = phase !== 'ready'; choice.setAttribute('aria-pressed', String(stage === index)); choice.append(node('span', 'mini-choice-icon', item.icon), node('strong', '', item.name), node('small', '', item.copy), node('span', 'mini-stage-record', course ? `🏅 ${course.medals}/3 · 최고 ${course.best}${definition.scoreUnit} · 완주 ${course.runs}번` : '🏅 0/3 · 첫 모험을 기다려요')); parent.append(choice);
     });
   }
   function drawCharacters(parent: HTMLElement): void {
@@ -149,7 +153,7 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
     const record = store.get(recordName(), definition.id);
     drawStages(stageList); drawStages(stageDialogBody, true); drawCharacters(collectionList);
     collectionBody.replaceChildren(node('p', 'mini-wallet', `내가 모은 별 ★ ${record.wallet}`)); const characters = node('div', 'mini-character-list'); drawCharacters(characters); collectionBody.append(characters, node('p', 'mini-local-note', '친구의 모습만 달라져요. 모은 별과 기록은 이 브라우저에 이름별로 저장돼요.'));
-    recordLabel.textContent = `${definition.id === 'maze' ? '가장 짧은 모험' : '나의 최고'} ${record.best} ${definition.scoreUnit} · 완주 ${record.runs}번 · ★ ${record.wallet}`;
+    recordLabel.textContent = `모험 ${record.runs}번 · ★ ${record.wallet} · 코스별 메달 ${Object.values(record.stages).reduce((sum, item) => sum + item.medals, 0)}개`;
     storageNote.textContent = store.available ? '모은 별과 기록은 이 브라우저에 이름별로 저장돼요.' : '저장 공간을 사용할 수 없어 지금 창에서만 기억해요.';
     readyChoice.textContent = `${definition.stages?.[stage]?.name || definition.title} · ${definition.characters?.find(item => item.id === character)?.name || '나의 모험'}`;
     stageButton.disabled = collectionButton.disabled = phase !== 'ready';
@@ -162,15 +166,25 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
   function preview(): void { session = definition.create({ seed: 73129, level: stage, character }); lastStatus = undefined; updateHUD(session.getStatus()); }
   function updateHUD(status: MiniStatus): void {
     stars.textContent = `★ ${status.stars}`; statusLabel.textContent = status.label; detail.textContent = status.detail; progress.value = Math.max(0, Math.min(1, status.progress));
+    const signature = JSON.stringify(status.objectives || []);
+    if (signature !== goalSignature) {
+      goalSignature = signature; goals.replaceChildren();
+      for (const objective of status.objectives || []) {
+        const item = node('span', 'mini-goal', `${objective.done ? '✓' : '○'} ${objective.label}`); item.dataset.done = String(objective.done); goals.append(item);
+      }
+      goals.hidden = !status.objectives?.length;
+    }
   }
   function setControls(enabled: boolean): void { actionButtons.forEach(target => { target.disabled = !enabled; }); pauseButton.disabled = !enabled; board.dataset.phase = phase; }
-  function start(): void {
+  function start(): void { begin(); }
+  function begin(sameRoad = false): void {
     if (phase === 'playing' || phase === 'paused') return;
     try { driver = normalizeName(nameInput.value); } catch (error) { nameError.textContent = (error as Error).message; nameInput.focus(); return; }
     nameInput.value = driver; nameError.textContent = ''; restorePreferences();
     try { selectProfile(driver); if (!persist()) notify('친구 이름을 저장하지 못했어요. 다음에도 같은 이름으로 놀면 기록을 찾을 수 있어요.'); } catch { /* Name-based records remain usable when shared identity cannot be stored. */ }
     resultDialog.close(); runId = crypto.randomUUID?.() || `${Date.now()}-${crypto.getRandomValues(new Uint32Array(1))[0]}`; runDriver = driver;
-    session = definition.create({ seed: crypto.getRandomValues(new Uint32Array(1))[0], level: stage, character });
+    if (!sameRoad) runSeed = crypto.getRandomValues(new Uint32Array(1))[0];
+    session = definition.create({ seed: runSeed, level: stage, character });
     phase = 'playing'; lastStatus = undefined; lastFeedback = ''; visualTime = 0; ready.hidden = true; feedback.hidden = true; setControls(true); renderChoices();
     nameInput.blur(); actionButtons[0]?.focus({ preventScroll: true });
     audio.unlock(); audio.playMusic(definition.id === 'maze' ? 'practice' : 'challenge'); live.textContent = `${definition.title}, 출발!`;
@@ -188,9 +202,13 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
   function finish(status: MiniStatus): void {
     if (phase !== 'playing') return;
     phase = 'result'; setControls(false); audio.stop(); audio.tone('record');
-    const result = store.award(runDriver, definition.id, runId, status.stars, status.score);
+    const objectives = status.objectives || [], medals = objectives.filter(item => item.done).length;
+    const result = store.award(runDriver, definition.id, runId, status.stars, status.score, { stage, medals });
     resultHeading.textContent = status.won ? '멋지게 해냈어!' : '아주 멋진 도전!'; resultSummary.textContent = status.summary; resultStars.textContent = `★ ${status.stars}`; resultScore.textContent = `${runDriver} · ${status.score} ${definition.scoreUnit}`;
     resultSave.textContent = result.stored ? `모은 별을 수집함에 넣었어요. 지금까지 ★ ${result.record.wallet}` : '저장 공간이 없어 기록은 지금 창에서만 기억해요.';
+    resultMedals.textContent = `이번 메달 ${medals}/3 · 이 코스 최고 ${result.record.stages[String(stage)]?.medals || 0}/3`;
+    resultGoals.replaceChildren(...objectives.map(item => node('li', item.done ? 'is-done' : '', `${item.done ? '✓' : '○'} ${item.label}`)));
+    nextButton.hidden = stage >= (definition.stages?.length || 1) - 1;
     renderChoices(); resultDialog.showModal(); retryButton.focus({ preventScroll: true }); live.textContent = `${status.summary} 별 ${status.stars}개를 모았어요.`;
   }
   function sync(): void {
@@ -206,7 +224,7 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
     }
     lastStatus = status;
   }
-  function act(action: MiniAction): void { if (phase !== 'playing') return; if (action === 'hint') lastFeedback = ''; session.act(action); sync(); }
+  function act(action: MiniAction): void { if (phase !== 'playing') return; if (['hint', 'trail', 'signal'].includes(action)) lastFeedback = ''; session.act(action); sync(); }
   form.addEventListener('submit', event => { event.preventDefault(); start(); });
   nameInput.addEventListener('input', () => { nameError.textContent = ''; });
   nameInput.addEventListener('change', () => { if (phase !== 'ready') return; try { normalizeName(nameInput.value); } catch { return; } restorePreferences(); renderChoices(); preview(); });
@@ -216,7 +234,7 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
     if (event.code === 'Escape') { event.preventDefault(); if (!event.repeat) pause(); return; }
     if (event.code === 'Space' && event.target instanceof HTMLElement && event.target.closest('button') && !controls.contains(event.target)) return;
     const control = definition.controls.find(item => item.keys.includes(event.code) || item.keys.includes(event.key));
-    if (control && phase === 'playing') { event.preventDefault(); if (!event.repeat || performance.now() - lastKeyAt > 130) { lastKeyAt = performance.now(); act(control.action); } }
+    if (control && phase === 'playing') { event.preventDefault(); if (!event.repeat || !['jump', 'signal', 'hint', 'trail'].includes(control.action) && performance.now() - lastKeyAt > 130) { lastKeyAt = performance.now(); act(control.action); } }
   });
   let pointer: { id: number; x: number; y: number } | undefined;
   canvas.addEventListener('pointerdown', event => { if (phase !== 'playing') return; pointer = { id: event.pointerId, x: event.clientX, y: event.clientY }; canvas.setPointerCapture(event.pointerId); });

@@ -53,3 +53,25 @@ test('corrupt saves normalize safely; deleting a character retains other names a
   assert.equal(reloaded.get('지한이', 'space').runs, 0);
   assert.equal(reloaded.get('친구', 'dino').wallet, 9);
 });
+test('old saves retain stars, characters and records while course medals start empty', () => {
+  const storage = memory();
+  storage.setItem(MINI_STORAGE_KEY, JSON.stringify({ version: 1, drivers: { 'name:지한이': { dino: { wallet: 35, total: 50, best: 700, runs: 4, stage: 1, character: 'blue', owned: ['blue'], receipts: ['old'] } } } }));
+  const store = new MiniProgressStore(storage), old = store.get('지한이', 'dino');
+  assert.deepEqual([old.wallet, old.total, old.best, old.runs, old.character], [35, 50, 700, 4, 'blue']);
+  assert.deepEqual(old.stages, {});
+  store.award('지한이', 'dino', 'new', 3, 600, { stage: 1, medals: 2 });
+  const record = new MiniProgressStore(storage).get('지한이', 'dino');
+  assert.equal(record.wallet, 38); assert.equal(record.best, 700);
+  assert.deepEqual(record.stages['1'], { runs: 1, best: 600, medals: 2 });
+});
+test('course records preserve highest medals and independent bests without duplicate rewards or mutable copies', () => {
+  const store = new MiniProgressStore(memory());
+  store.award('지한이', 'maze', 'a', 8, 20, { stage: 0, medals: 3 });
+  store.award('지한이', 'maze', 'b', 8, 30, { stage: 0, medals: 2 });
+  store.award('지한이', 'maze', 'c', 9, 50, { stage: 1, medals: 1 });
+  store.award('지한이', 'maze', 'c', 9, 2, { stage: 1, medals: 3 });
+  const record = store.get('지한이', 'maze');
+  assert.deepEqual(record.stages, { '0': { runs: 2, best: 20, medals: 3 }, '1': { runs: 1, best: 50, medals: 1 } });
+  assert.equal(record.wallet, 25); record.stages['0'].medals = 0;
+  assert.equal(store.get('지한이', 'maze').stages['0'].medals, 3);
+});

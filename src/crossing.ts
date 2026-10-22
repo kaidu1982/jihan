@@ -25,6 +25,41 @@ function car(ctx: CanvasRenderingContext2D, row: CrossingRow, x: number, y: numb
   rounded(ctx, width / 2 - 8, -11, 4, 6, 2, '#fff4c6'); rounded(ctx, width / 2 - 8, 5, 4, 6, 2, '#fff4c6');
   ctx.restore();
 }
+function railway(ctx: CanvasRenderingContext2D, session: CrossingSession, row: CrossingRow, y: number, width: number, reducedMotion: boolean): void {
+  rounded(ctx, 0, y - 23, width, 46, 0, '#b3a48e');
+  for (let x = 4; x < width; x += 23) rounded(ctx, x, y - 17, 9, 34, 2, '#7f705f');
+  for (const dy of [-10, 10]) { rounded(ctx, 0, y + dy - 3, width, 6, 1, '#555e5c'); rounded(ctx, 0, y + dy - 3, width, 2, 0, '#d7ded4'); }
+  const signal = session.trainState(row)!;
+  const closed = signal.phase !== 'clear', bright = reducedMotion || Math.floor(session.elapsed / 280) % 2 === 0;
+  for (const x of [16, width - 16]) {
+    rounded(ctx, x - 3, y - 29, 6, 51, 2, '#526b5c');
+    rounded(ctx, x - 10, y - 36, 20, 24, 7, '#40574d');
+    ctx.fillStyle = closed ? bright ? '#ffad86' : '#d76d57' : '#bce889';
+    ctx.beginPath(); ctx.arc(x, y - 24, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.translate(x, y + 20);
+    ctx.rotate(closed ? 0 : x < width / 2 ? -.85 : .85);
+    const direction = x < width / 2 ? 1 : -1;
+    rounded(ctx, Math.min(0, direction * (width / 2 - 24)), -3, width / 2 - 24, 7, 2, '#fff2cf');
+    for (let segment = 0; segment < width / 2 - 29; segment += 25) {
+      ctx.fillStyle = '#d37860'; ctx.fillRect(direction > 0 ? segment : -segment - 11, -3, 11, 7);
+    }
+    ctx.restore();
+  }
+  if (signal.phase !== 'passing') return;
+  const trainWidth = signal.width * 49;
+  ctx.save(); ctx.translate(38 + signal.center! * 49, y); if (row.direction < 0) ctx.scale(-1, 1);
+  rounded(ctx, -trainWidth / 2, -17, trainWidth, 38, 10, '#43585135');
+  for (let i = 0; i < 6; i++) rounded(ctx, -trainWidth / 2 + 10 + i * (trainWidth - 30) / 5, 10, 12, 12, 4, '#405451');
+  rounded(ctx, -trainWidth / 2, -19, trainWidth, 36, 8, '#d48a59');
+  rounded(ctx, -trainWidth / 2 + 2, -21, trainWidth - 4, 7, 3, '#eebd78');
+  rounded(ctx, -trainWidth / 2 + 5, 6, trainWidth - 10, 7, 2, '#f0c870');
+  for (let i = 0; i < 6; i++) {
+    rounded(ctx, -trainWidth / 2 + 10 + i * (trainWidth - 25) / 6, -11, 19, 13, 3, '#536f70');
+    rounded(ctx, -trainWidth / 2 + 12 + i * (trainWidth - 25) / 6, -10, 15, 5, 2, '#bfe0d7');
+  }
+  rounded(ctx, trainWidth / 2 - 7, -11, 5, 8, 2, '#fff3bb');
+  ctx.restore();
+}
 function character(ctx: CanvasRenderingContext2D, session: CrossingSession, x: number, y: number, time: number, reduce: boolean): void {
   const bunny = session.character === 'bunny', frog = session.character === 'frog';
   const color = bunny ? '#eee6d6' : frog ? '#8ebd70' : '#ffdc78';
@@ -43,10 +78,10 @@ function character(ctx: CanvasRenderingContext2D, session: CrossingSession, x: n
 
 const crossing: MiniGameDefinition = {
   id: 'crossing', title: '길 건너기', icon: '🐥', kicker: 'ONE LITTLE HOP AT A TIME', tagline: '살펴보고, 폴짝!\n친구들이 기다리고 있어.',
-  description: '차가 지나가는 틈을 살펴 한 칸씩 건너요. 반짝이는 별을 따라 풀밭에서 쉬어가요.', accent: '#729361', startLabel: '폴짝! 건너기', scoreUnit: '점',
+  description: '차가 지나가는 틈을 살펴 한 칸씩 건너요. 기찻길에서는 신호를 보고, 별길을 따라 풀밭에서 쉬어가요.', accent: '#729361', startLabel: '폴짝! 건너기', scoreUnit: '점',
   instructions: [
     { icon: '↑', title: '한 칸씩 폴짝!', copy: '화살표 버튼이나 방향키로 움직여요.' },
-    { icon: '🚗', title: '차가 지나가면 출발', copy: '잠깐 기다리며 빈 길을 찾아봐요.' },
+    { icon: '🚦', title: '차와 기차를 살펴요', copy: '빨간불이면 기찻길 앞 풀밭에서 기다려요.' },
     { icon: '☘', title: '풀밭에서 쉬어가요', copy: '실수하면 가까운 풀밭으로 돌아와요.' },
   ],
   controls: [
@@ -55,7 +90,7 @@ const crossing: MiniGameDefinition = {
     { action: 'down', label: '뒤로', icon: '↓', keys: ['ArrowDown', 'KeyS'] },
     { action: 'right', label: '오른쪽', icon: '→', keys: ['ArrowRight', 'KeyD'] },
   ],
-  stages: [ { name: '작은 마을', icon: '🌼', copy: '10칸의 느긋한 첫 산책' }, { name: '나무 마을', icon: '🌳', copy: '14칸을 건너 친구 만나기' }, { name: '노을 마을', icon: '🌅', copy: '18칸의 따뜻한 저녁 산책' } ],
+  stages: [ { name: '작은 마을', icon: '🌼', copy: '10칸의 느긋한 첫 산책' }, { name: '나무 마을 기찻길', icon: '🚂', copy: '14칸 · 기찻길 1곳에서 신호 보기' }, { name: '노을 마을 기찻길', icon: '🌅', copy: '18칸 · 기찻길 2곳을 지나 친구 만나기' } ],
   characters: [ { id: 'chick', name: '꼬마 병아리', icon: '🐥', cost: 0 }, { id: 'frog', name: '초록 개구리', icon: '🐸', cost: 10 }, { id: 'bunny', name: '하얀 토끼', icon: '🐰', cost: 20 } ],
   create: options => new CrossingSession(options),
   draw(ctx, model, frame): void {
@@ -66,7 +101,9 @@ const crossing: MiniGameDefinition = {
     for (let index = Math.max(0, Math.floor(camera) - 2); index < session.rows.length; index++) {
       const row = session.rows[index], y = projectY(index); if (y < 75 || y > 590) continue;
       ctx.fillStyle = row.kind === 'road' ? palette.road : palette.grass; ctx.fillRect(0, y - tile / 2, width, tile + 1);
-      if (row.kind === 'road') {
+      if (row.kind === 'rail') {
+        railway(ctx, session, row, y, width, frame.reducedMotion);
+      } else if (row.kind === 'road') {
         ctx.strokeStyle = '#f7f2db65'; ctx.lineWidth = 2; ctx.setLineDash([12, 14]); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); ctx.setLineDash([]);
         for (const x of session.cars(row)) car(ctx, row, 38 + x * 49, y);
       } else {

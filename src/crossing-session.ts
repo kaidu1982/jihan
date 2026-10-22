@@ -1,14 +1,21 @@
 import type { MiniAction, MiniOptions, MiniSession, MiniStatus } from './mini-types';
 
-export type CrossingRow = { index: number; kind: 'grass' | 'road' | 'finish'; direction: number; speed: number; phase: number; gap: number; width: number; color: number };
+export type CrossingRow = { index: number; kind: 'grass' | 'road' | 'rail' | 'finish'; direction: number; speed: number; phase: number; gap: number; width: number; color: number };
 export const CROSSING_COLUMNS = 7, CROSSING_MOVE_MS = 145;
+export const CROSSING_TRAIN_CLEAR_MS = 5600, CROSSING_TRAIN_WARNING_MS = 2000, CROSSING_TRAIN_PASS_MS = 1200;
+export const CROSSING_TRAIN_WIDTH = 4.2;
+const TRAIN_CYCLE_MS = CROSSING_TRAIN_CLEAR_MS + CROSSING_TRAIN_WARNING_MS + CROSSING_TRAIN_PASS_MS;
+export type CrossingTrainState = { phase: 'clear' | 'warning' | 'passing'; remainingMs: number; center?: number; width: number };
+export type CrossingHazard = { kind: 'car' | 'train'; center: number; width: number };
 export function makeCrossingCourse(seed: number, level = 0): CrossingRow[] {
   let state = (Number.isFinite(seed) ? seed : 1) >>> 0;
   const random = (): number => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 0x100000000; };
-  const goal = [10, 14, 18][Math.max(0, Math.min(2, Math.floor(level)))];
+  const courseLevel = Number.isFinite(level) ? Math.max(0, Math.min(2, Math.floor(level))) : 0;
+  const goal = [10, 14, 18][courseLevel];
   return Array.from({ length: goal + 1 }, (_, index) => ({ index,
-    kind: index === goal ? 'finish' : index < 2 || index % 4 === 0 ? 'grass' : 'road',
-    direction: index % 2 ? 1 : -1, speed: .57 + random() * .21 + Math.min(2, Math.max(0, level)) * .07,
+    kind: index === goal ? 'finish' : ((courseLevel >= 1 && index === 6) || (courseLevel === 2 && index === 14)) ? 'rail'
+      : index < 2 || index % 4 === 0 || (courseLevel >= 1 && index === 5) || (courseLevel === 2 && index === 13) ? 'grass' : 'road',
+    direction: index % 2 ? 1 : -1, speed: .57 + random() * .21 + courseLevel * .07,
     phase: random() * 5.8, gap: 5.6 + random() * .8, width: 1.05 + random() * .35, color: Math.floor(random() * 4),
   }));
 }
@@ -39,6 +46,25 @@ export class CrossingSession implements MiniSession {
     const base = ((row.phase + row.direction * row.speed * elapsed / 1000) % row.gap + row.gap) % row.gap;
     return [-2, -1, 0, 1, 2].map(index => base + index * row.gap).filter(center => center > -1.5 && center < CROSSING_COLUMNS + .5);
   }
+  /** Signals and the moving train share one deterministic, pause-safe clock. */
+  trainState(row: CrossingRow, elapsed = this.elapsed): CrossingTrainState | undefined {
+    if (row.kind !== 'rail') return undefined;
+    const offset = row.phase * 550;
+    const time = ((elapsed + offset) % TRAIN_CYCLE_MS + TRAIN_CYCLE_MS) % TRAIN_CYCLE_MS;
+    if (time < CROSSING_TRAIN_CLEAR_MS) return { phase: 'clear', remainingMs: CROSSING_TRAIN_CLEAR_MS - time, width: CROSSING_TRAIN_WIDTH };
+    if (time < CROSSING_TRAIN_CLEAR_MS + CROSSING_TRAIN_WARNING_MS) return { phase: 'warning', remainingMs: CROSSING_TRAIN_CLEAR_MS + CROSSING_TRAIN_WARNING_MS - time, width: CROSSING_TRAIN_WIDTH };
+    const progress = (time - CROSSING_TRAIN_CLEAR_MS - CROSSING_TRAIN_WARNING_MS) / CROSSING_TRAIN_PASS_MS;
+    const start = -CROSSING_TRAIN_WIDTH / 2 - 1.2;
+    const end = CROSSING_COLUMNS - 1 - start;
+    return { phase: 'passing', remainingMs: TRAIN_CYCLE_MS - time, width: CROSSING_TRAIN_WIDTH,
+      center: row.direction > 0 ? start + (end - start) * progress : end - (end - start) * progress };
+  }
+  /** Actual bodies only: a red warning light is never a collision. */
+  hazards(row: CrossingRow, elapsed = this.elapsed): CrossingHazard[] {
+    if (row.kind === 'road') return this.cars(row, elapsed).map(center => ({ kind: 'car', center, width: row.width }));
+    const train = this.trainState(row, elapsed);
+    return train?.phase === 'passing' ? [{ kind: 'train', center: train.center!, width: train.width }] : [];
+  }
   act(action: MiniAction): void {
     if (this.finished || this.moving) return;
     const moves: Partial<Record<MiniAction, [number, number]>> = { left: [-1, 0], right: [1, 0], up: [0, 1], down: [0, -1] };
@@ -46,7 +72,9 @@ export class CrossingSession implements MiniSession {
     const column = this.column + move[0], row = this.row + move[1];
     if (column < 0 || column >= CROSSING_COLUMNS || row < 0 || row > this.goal) { this.feedback = '길 안에서 한 칸씩 움직여요.'; return; }
     this.from = { row: this.row, column: this.column }; this.column = column; this.row = row; this.moveElapsed = 0;
-    this.feedback = this.rows[row].kind === 'road' ? '차가 오는 쪽을 살펴봐요!' : '풀밭에서는 편하게 쉬어도 돼요.';
+    this.feedback = this.rows[row].kind === 'road' ? '차가 오는 쪽을 살펴봐요!'
+      : this.rows[row].kind === 'rail' ? '기찻길은 멈추지 말고 한 칸씩 건너요!'
+        : this.rows[row + 1]?.kind === 'rail' ? '기찻길 앞 풀밭이에요. 신호를 보고 기다려요.' : '풀밭에서는 편하게 쉬어도 돼요.';
   }
   advance(deltaMs: number): void {
     if (this.finished || !Number.isFinite(deltaMs) || deltaMs <= 0) return;
@@ -59,8 +87,8 @@ export class CrossingSession implements MiniSession {
       this.visualRow = this.from.row + (this.row - this.from.row) * progress;
       let hit = false;
       if (!this.protected) for (const road of this.rows) {
-        if (road.kind !== 'road' || Math.abs(this.visualRow - road.index) > .32) continue;
-        if (this.cars(road).some(center => Math.abs(center - this.visualColumn) < road.width / 2 + .22)) { hit = true; break; }
+        if (Math.abs(this.visualRow - road.index) > .32) continue;
+        if (this.hazards(road).some(hazard => Math.abs(hazard.center - this.visualColumn) < hazard.width / 2 + .22)) { hit = true; break; }
       }
       if (hit) {
         this.mistakes++; this.protectedUntil = this.elapsed + 1500;
@@ -77,9 +105,22 @@ export class CrossingSession implements MiniSession {
     if (this.row === this.goal && !this.finished) { this.finished = true; this.stars += 5; this.feedback = '끝까지 건넜어요! 친구들이 기다리고 있어요.'; }
   }
   getStatus(): MiniStatus {
+    const collected = this.coins.filter(coin => coin.collected).length, target = Math.min(2, this.coins.length);
+    const nextRail = this.rows.find(row => row.kind === 'rail' && row.index >= this.row);
+    // Keep the traffic advice on roads far from the next railway: waiting is safe on grass.
+    const train = nextRail && nextRail.index - this.row <= 2 ? this.trainState(nextRail) : undefined;
+    const detail = this.rows[this.row].kind === 'rail' ? '🚂 기찻길에서는 멈추지 말고 풀밭으로 이동해요!'
+      : train ? train.phase === 'clear' ? '🚦 초록불! 좌우를 보고 기찻길을 건너요.'
+      : train.phase === 'warning' ? `🚦 기차가 곧 와요! 앞 풀밭에서 ${Math.ceil(train.remainingMs / 1000)}초 기다려요.`
+        : '🚂 기차가 지나가요! 앞 풀밭에서 기다려요.' : '차를 살펴보고 한 칸씩! · 풀밭에서 쉬어가요';
     return { score: Math.max(0, this.row * 10 + this.stars * 5 - this.mistakes * 3), stars: this.stars,
       progress: this.row / this.goal, label: `${this.row} / ${this.goal}칸`,
-      detail: `차를 살펴보고 한 칸씩! · 풀밭에서 쉬어가요`, finished: this.finished, won: this.finished,
-      summary: `차를 살피며 ${this.goal}칸을 건너 친구들에게 도착했어요!`, feedback: this.feedback, mistakes: this.mistakes };
+      detail, finished: this.finished, won: this.finished,
+      summary: `${this.level ? '차와 기차' : '차'}를 살피며 ${this.goal}칸을 건너 친구들에게 도착했어요!`, feedback: this.feedback, mistakes: this.mistakes,
+      objectives: [
+        { id: 'finish', label: '친구들에게 도착', done: this.finished },
+        { id: 'star-path', label: `별길 ${target}곳 찾기 (${Math.min(collected, target)}/${target})`, done: collected >= target },
+        { id: 'careful', label: '실수 2번 이하로 완주', done: this.finished && this.mistakes <= 2 },
+      ] };
   }
 }

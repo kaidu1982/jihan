@@ -3,10 +3,10 @@ import { GameAudio } from './audio';
 import { activeProfile, persist, saved, selectProfile } from './storage';
 import { normalizeName } from '../functions/src/shared/rules';
 import { KART_STORAGE_KEY } from './kart-storage';
-import { createKartGame, type KartScene, type KartTheme, type KartVehicle, type KartProgress, type KartResult } from './kart-game';
+import { createKartGame, type KartScene, type KartTheme, type KartVehicle, type KartProgress, type KartResult, type KartDifficulty } from './kart-game';
 
 type Phase = 'ready' | 'playing' | 'paused' | 'finished';
-type RecordData = { wallet: number; totalStars: number; runs: number; bestStars: number; owned: KartVehicle[]; vehicle: KartVehicle; theme: KartTheme };
+type RecordData = { wallet: number; totalStars: number; runs: number; bestStars: number; owned: KartVehicle[]; vehicle: KartVehicle; theme: KartTheme; difficulty: KartDifficulty };
 type Store = { version: 1; records: Record<string, RecordData> };
 const COURSES: { id: KartTheme; symbol: string; name: string; detail: string; color: string }[] = [
   { id: 'meadow', symbol: '🌳', name: '초록 들판', detail: '나무 사이로 기분 좋게 씽씽', color: '#dcebc6' },
@@ -21,8 +21,9 @@ const VEHICLES: { id: KartVehicle; symbol: string; name: string; detail: string;
 ];
 const isVehicle = (value: unknown): value is KartVehicle => VEHICLES.some(item => item.id === value);
 const isTheme = (value: unknown): value is KartTheme => COURSES.some(item => item.id === value);
+const difficultyName = (difficulty: KartDifficulty): string => difficulty === 'easy' ? '천천히 드라이브' : '씽씽 드라이브';
 const count = (value: unknown, max = 1_000_000_000): number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? Math.min(max, value) : 0;
-const freshRecord = (): RecordData => ({ wallet: 0, totalStars: 0, runs: 0, bestStars: 0, owned: ['kart'], vehicle: 'kart', theme: 'meadow' });
+const freshRecord = (): RecordData => ({ wallet: 0, totalStars: 0, runs: 0, bestStars: 0, owned: ['kart'], vehicle: 'kart', theme: 'meadow', difficulty: 'normal' });
 let storageAvailable = true;
 function loadStore(): Store {
   const result: Store = { version: 1, records: Object.create(null) as Record<string, RecordData> };
@@ -33,7 +34,7 @@ function loadStore(): Store {
       if (!value || typeof value !== 'object') continue;
       const data = value as Partial<RecordData>;
       const owned = [...new Set<KartVehicle>(['kart', ...(Array.isArray(data.owned) ? data.owned.filter(isVehicle) : [])])];
-      result.records[key] = { wallet: count(data.wallet), totalStars: count(data.totalStars), runs: count(data.runs), bestStars: count(data.bestStars, 10000), owned, vehicle: isVehicle(data.vehicle) && owned.includes(data.vehicle) ? data.vehicle : 'kart', theme: isTheme(data.theme) ? data.theme : 'meadow' };
+      result.records[key] = { wallet: count(data.wallet), totalStars: count(data.totalStars), runs: count(data.runs), bestStars: count(data.bestStars, 10000), owned, vehicle: isVehicle(data.vehicle) && owned.includes(data.vehicle) ? data.vehicle : 'kart', theme: isTheme(data.theme) ? data.theme : 'meadow', difficulty: data.difficulty === 'easy' ? 'easy' : 'normal' };
     }
   } catch { storageAvailable = false; }
   return result;
@@ -76,7 +77,7 @@ intro.append(el('p', 'kart-intro-copy', '작은 자동차로 떠나는 1분 여�
 const infoTag = el('div', 'kart-info-tag'); infoTag.append(el('span', '', '🏁'), el('div', '', ''));
 infoTag.lastElementChild!.append(el('strong', '', '미니 카트'), el('small', '', '한 판 60초 · 좌우로 움직여요')); intro.append(infoTag);
 const how = el('div', 'kart-how'); how.append(el('h2', '', '이렇게 달려요'));
-[['↔', '왼쪽, 오른쪽!', '큰 화살표 버튼으로 길을 바꿔요.'], ['★', '반짝이는 별을 쏙!', '모은 별로 새 자동차를 만나요.'], ['♥', '부딪혀도 괜찮아', '잠깐 느려져도 끝까지 갈 수 있어요.']].forEach(([symbol, name, detail]) => {
+[['↔', '왼쪽, 오른쪽!', '큰 화살표 버튼으로 길을 바꿔요.'], ['★', '별 10개면 보호막!', '방울이 장애물을 한 번 막아줘요.'], ['♥', '부딪혀도 괜찮아', '잠깐 느려져도 끝까지 갈 수 있어요.']].forEach(([symbol, name, detail]) => {
   const row = el('div', 'kart-how-row'); const copy = el('p'); copy.append(el('strong', '', name), el('span', '', detail)); row.append(el('span', 'kart-how-icon', symbol), copy); how.append(row);
 });
 intro.append(how, el('p', 'kart-keyboard-note', '키보드는 ← → 또는 A D · 화면을 밀어도 돼요'));
@@ -95,6 +96,7 @@ const timeLeft = el('strong', 'kart-time', '60'); const timerWrap = el('span', '
 const pauseButton = button('Ⅱ', 'kart-pause', () => pauseRun()); pauseButton.setAttribute('aria-label', '잠깐 쉬기'); pauseButton.disabled = true;
 hudTop.append(starCount, timerWrap, pauseButton); hud.append(hudTop);
 const progressRow = el('div', 'kart-progress-row'); const raceProgress = el('progress', 'kart-progress'); raceProgress.max = 1; raceProgress.value = 0; raceProgress.setAttribute('aria-label', '결승선까지 달린 거리'); progressRow.append(el('span', '', '출발'), raceProgress, el('span', '', '🏁')); hud.append(progressRow); shell.append(hud);
+const driveStatus = el('div', 'kart-drive-status'); const difficultyStatus = el('span', 'kart-difficulty-status'); const shieldStatus = el('span', 'kart-shield-status'); shieldStatus.setAttribute('aria-label', '별 10개를 모으면 보호막'); driveStatus.append(difficultyStatus, shieldStatus); hud.append(driveStatus);
 const gentleMessage = el('p', 'kart-gentle-message'); gentleMessage.hidden = true; shell.append(gentleMessage);
 const readyOverlay = el('div', 'kart-overlay kart-ready-overlay');
 const readyCard = el('form', 'kart-ready-card'); readyCard.noValidate = true; const readyKicker = el('p', 'kart-card-kicker', 'READY, LITTLE DRIVER?');
@@ -102,10 +104,24 @@ readyCard.append(readyKicker, el('h2', '', '우리 같이 달려볼까?'));
 const nameLabel = el('label', 'kart-name-label'); nameLabel.htmlFor = 'kart-driver-name'; nameLabel.append(el('span', 'sr-only', '운전할 친구 이름'), el('span', 'kart-name-icon', '☺'));
 const nameInput = el('input'); nameInput.id = 'kart-driver-name'; nameInput.name = 'driver'; nameInput.type = 'text'; nameInput.maxLength = 12; nameInput.placeholder = '친구 이름'; nameInput.setAttribute('autocomplete', 'nickname'); nameInput.value = initialName; nameInput.required = true; nameInput.setAttribute('aria-describedby', 'kart-name-error'); nameLabel.append(nameInput, el('span', 'kart-name-end', '의 자동차'));
 const nameError = el('p', 'kart-name-error'); nameError.id = 'kart-name-error'; nameError.setAttribute('role', 'alert');
+const difficultyPicker = el('fieldset', 'kart-difficulty-picker'); difficultyPicker.append(el('legend', '', '어떻게 달려볼까?'));
+const difficultyButtons: { difficulty: KartDifficulty; button: HTMLButtonElement }[] = [];
+for (const [difficulty, symbol, titleText, detail] of [
+  ['easy', '🐢', '천천히', '느린 속도 · 넓은 길'],
+  ['normal', '🏎️', '씽씽', '조금 더 빠르게!'],
+] as const) {
+  const choice = button('', 'kart-difficulty-choice', () => {
+    if (phase !== 'ready' && phase !== 'finished') return;
+    record().difficulty = difficulty; storeRecord(); renderChoices();
+    scene?.idle({ theme: record().theme, vehicle: record().vehicle, difficulty });
+  });
+  choice.append(el('strong', '', `${symbol} ${titleText}`), el('small', '', detail));
+  difficultyButtons.push({ difficulty, button: choice }); difficultyPicker.append(choice);
+}
 const readyDescription = el('p', 'kart-ready-description');
 const startButton = el('button', 'kart-primary', '불러오는 중…'); startButton.type = 'submit'; startButton.disabled = true;
-const readyFootnote = el('p', 'kart-ready-footnote', '천천히 시작해요. 부딪혀도 계속 달릴 수 있어요.');
-readyCard.append(nameLabel, nameError, readyDescription, startButton, readyFootnote); readyOverlay.append(readyCard); shell.append(readyOverlay);
+const readyFootnote = el('p', 'kart-ready-footnote', '별 10개마다 방울 보호막! 한 번에 1개씩 준비해요.');
+readyCard.append(nameLabel, nameError, difficultyPicker, readyDescription, startButton, readyFootnote); readyOverlay.append(readyCard); shell.append(readyOverlay);
 const pauseOverlay = el('div', 'kart-overlay kart-pause-overlay'); pauseOverlay.hidden = true;
 const pauseCard = el('div', 'kart-modal-card'); pauseCard.setAttribute('role', 'dialog'); pauseCard.setAttribute('aria-modal', 'true'); pauseCard.setAttribute('aria-labelledby', 'kart-pause-heading');
 const pauseHeading = el('h2', '', '잠깐 쉬어가요'); pauseHeading.id = 'kart-pause-heading';
@@ -131,7 +147,7 @@ const garagePanel = el('div', 'kart-side-panel kart-garage-panel');
 const garageHeading = el('div', 'kart-side-heading'); garageHeading.append(el('h2', '', '나의 작은 차고'));
 const wallet = el('strong', 'kart-wallet', '★ 0'); garageHeading.append(wallet); garagePanel.append(garageHeading, el('p', 'kart-side-copy', '별을 모아 나만의 자동차를 만나요.'));
 const garageList = el('div', 'kart-garage-list'); garagePanel.append(garageList, el('p', 'kart-cosmetic-note', '모든 자동차의 빠르기와 조작은 같아요.'), button('차고 구경하기 →', 'kart-text-button', () => openDialog(garageDialog))); sidebar.append(garagePanel);
-const bestPanel = el('div', 'kart-best-panel'); const personalBest = el('strong'); const totalRuns = el('small'); bestPanel.append(el('span', '', '✦'), el('div')); bestPanel.lastElementChild!.append(el('span', '', '나의 최고 별 기록'), personalBest, totalRuns); sidebar.append(bestPanel);
+const bestPanel = el('div', 'kart-best-panel'); const personalBest = el('strong'); const totalRuns = el('small'); bestPanel.append(el('span', '', '✦'), el('div')); bestPanel.lastElementChild!.append(el('span', '', '모든 드라이브 최고 별 기록'), personalBest, totalRuns); sidebar.append(bestPanel);
 const storageNote = el('p', 'kart-storage-note'); sidebar.append(storageNote);
 const footer = el('footer', 'kart-footer', '작은 도전, 커다란 즐거움 ✦'); app.append(footer);
 const live = el('p', 'sr-only'); live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite'); app.append(live);
@@ -160,11 +176,11 @@ let runProfileId = profileId;
 let lastProgress: KartProgress | undefined;
 let lastSeconds = -1;
 let messageTimeout: ReturnType<typeof setTimeout> | undefined;
-function setDriving(enabled: boolean): void { leftButton.disabled = rightButton.disabled = !enabled; pauseButton.disabled = !enabled; courseOpen.disabled = garageOpen.disabled = phase === 'playing' || phase === 'paused'; shell.dataset.phase = phase; }
+function setDriving(enabled: boolean): void { leftButton.disabled = rightButton.disabled = !enabled; pauseButton.disabled = !enabled; courseOpen.disabled = garageOpen.disabled = phase === 'playing' || phase === 'paused'; for (const choice of difficultyButtons) choice.button.disabled = phase === 'playing' || phase === 'paused'; shell.dataset.phase = phase; }
 function renderCourseChoices(parent: HTMLElement, closeOnChoice: boolean): void {
   parent.replaceChildren();
   for (const course of COURSES) {
-    const choice = button('', 'kart-course-choice', () => { if (phase !== 'ready' && phase !== 'finished') return; record().theme = course.id; storeRecord(); renderChoices(); scene?.idle({ theme: record().theme, vehicle: record().vehicle }); if (closeOnChoice) courseDialog.close(); });
+    const choice = button('', 'kart-course-choice', () => { if (phase !== 'ready' && phase !== 'finished') return; record().theme = course.id; storeRecord(); renderChoices(); scene?.idle({ theme: record().theme, vehicle: record().vehicle, difficulty: record().difficulty }); if (closeOnChoice) courseDialog.close(); });
     choice.disabled = phase === 'playing' || phase === 'paused'; choice.setAttribute('aria-pressed', String(record().theme === course.id)); choice.style.setProperty('--course-color', course.color); const art = el('span', 'kart-course-art', course.symbol); art.setAttribute('aria-hidden', 'true'); const copy = el('span', 'kart-course-copy'); copy.append(el('strong', '', course.name), el('small', '', course.detail)); choice.append(art, copy, el('span', 'kart-choice-check', record().theme === course.id ? '✓' : '')); parent.append(choice);
   }
 }
@@ -175,7 +191,7 @@ function chooseVehicle(vehicle: typeof VEHICLES[number]): void {
     if (data.wallet < vehicle.cost) { notify(`별 ${vehicle.cost - data.wallet}개를 더 모으면 만날 수 있어요!`); return; }
     data.wallet -= vehicle.cost; data.owned.push(vehicle.id); notify(`${vehicle.name}가 차고에 왔어요!`);
   }
-  data.vehicle = vehicle.id; storeRecord(); renderChoices(); scene?.idle({ theme: data.theme, vehicle: data.vehicle });
+  data.vehicle = vehicle.id; storeRecord(); renderChoices(); scene?.idle({ theme: data.theme, vehicle: data.vehicle, difficulty: data.difficulty });
 }
 function renderGarage(parent: HTMLElement, compact = false): void {
   parent.replaceChildren();
@@ -190,25 +206,40 @@ function renderChoices(): void {
   renderCourseChoices(courseList, false); renderCourseChoices(courseDialogBody, true); renderGarage(garageList, true); renderGarage(dialogGarageList);
   const data = record(); wallet.textContent = `★ ${data.wallet}`; dialogWallet.textContent = `내가 모은 별 ★ ${data.wallet}`; personalBest.textContent = `${data.bestStars}개`; totalRuns.textContent = `${data.runs}번의 즐거운 완주`; storageNote.textContent = storageAvailable ? sharedProfileStored ? '별과 자동차는 이 브라우저에 친구 이름별로 저장돼요.' : '별은 이 이름으로 저장돼요. 다음에 친구 이름을 다시 입력해 주세요.' : '저장 공간을 사용할 수 없어, 기록은 지금 창에서만 기억해요.';
   const course = COURSES.find(item => item.id === data.theme)!; const vehicle = VEHICLES.find(item => item.id === data.vehicle)!;
-  courseOpen.textContent = `${course.symbol} 코스`; garageOpen.textContent = `${vehicle.symbol} 차고`; readyDescription.textContent = `${course.name} · ${vehicle.name} · 60초 드라이브`;
+  courseOpen.textContent = `${course.symbol} 코스`; garageOpen.textContent = `${vehicle.symbol} 차고`; readyDescription.textContent = `${course.name} · ${vehicle.name} · 60초`;
+  for (const choice of difficultyButtons) choice.button.setAttribute('aria-pressed', String(choice.difficulty === data.difficulty));
+  if (phase === 'ready') {
+    difficultyStatus.textContent = difficultyName(data.difficulty);
+    shieldStatus.textContent = '🫧 별 10개면 보호막'; shieldStatus.dataset.ready = 'false';
+    shieldStatus.setAttribute('aria-label', '별 10개를 모으면 보호막');
+  }
 }
 function update(progress: KartProgress): void {
   if (phase !== 'playing') return;
   lastProgress = progress; const seconds = Math.ceil(Math.max(0, progress.duration - progress.elapsed)); if (seconds !== lastSeconds) { timeLeft.textContent = String(seconds); lastSeconds = seconds; }
   starCount.textContent = `★ ${progress.stars}`; starCount.setAttribute('aria-label', `모은 별 ${progress.stars}개`); raceProgress.value = progress.progress;
-  if (progress.stars === 10 && starCount.dataset.goal !== 'done') { starCount.dataset.goal = 'done'; live.textContent = '별 10개 모으기 성공!'; }
+  difficultyStatus.textContent = difficultyName(progress.difficulty);
+  shieldStatus.textContent = progress.shield ? '🫧 보호막 준비!' : `🫧 별 ${10 - progress.stars % 10}개 더`;
+  shieldStatus.dataset.ready = String(progress.shield);
+  shieldStatus.setAttribute('aria-label', progress.shield ? '보호막 준비 완료. 장애물을 한 번 막아줘요.' : `별 ${10 - progress.stars % 10}개를 더 모으면 보호막`);
+  if (progress.stars >= 10 && starCount.dataset.goal !== 'done') { starCount.dataset.goal = 'done'; live.textContent = '별 10개 모으기 성공! 방울 보호막이 생겼어요.'; }
 }
-function event(kind: 'star' | 'bump'): void {
+function event(kind: 'star' | 'bump' | 'shield' | 'block'): void {
   if (phase !== 'playing') return;
   if (kind === 'star') audio.tone('step', lastProgress?.stars || 0);
-  else { audio.tone('turn'); gentleMessage.textContent = '괜찮아! 잠깐 쉬고 다시 씽씽'; gentleMessage.hidden = false; live.textContent = '괜찮아! 잠깐 느려져도 계속 달릴 수 있어요.'; clearTimeout(messageTimeout); messageTimeout = setTimeout(() => { gentleMessage.hidden = true; }, 1800); }
+  else {
+    audio.tone(kind === 'shield' || kind === 'block' ? 'record' : 'turn');
+    gentleMessage.textContent = kind === 'shield' ? '🫧 별 10개! 보호막이 생겼어!' : kind === 'block' ? '🫧 톡! 보호막이 지켜줬어!' : '괜찮아! 잠깐 쉬고 다시 씽씽';
+    gentleMessage.hidden = false; live.textContent = gentleMessage.textContent;
+    clearTimeout(messageTimeout); messageTimeout = setTimeout(() => { gentleMessage.hidden = true; }, 1800);
+  }
 }
 function finish(result: KartResult): void {
   if (awarded || phase !== 'playing') return;
   awarded = true; phase = 'finished'; setDriving(false); audio.stop(); audio.tone('record'); timeLeft.textContent = '0'; raceProgress.value = 1;
   const stars = count(result.stars, 10000); const data = store.records[runProfileId] ||= freshRecord(); data.wallet += stars; data.totalStars += stars; data.runs += 1; data.bestStars = Math.max(data.bestStars, stars); const stored = storeRecord();
-  finishName.textContent = `${nameInput.value.trim()}의 1분 여행, 끝까지 성공했어요.`; finishStars.textContent = `★ ${stars}`; finishGoals.replaceChildren();
-  [[true, '끝까지 완주했어요'], [stars >= 10, '별 10개를 모아요'], [result.bumps === 0, '부딪히지 않고 도착해요']].forEach(([achieved, text]) => { const goal = el('p', achieved ? 'achieved' : ''); goal.append(el('span', '', achieved ? '✓' : '○'), document.createTextNode(String(text))); finishGoals.append(goal); });
+  finishName.textContent = `${nameInput.value.trim()} · ${difficultyName(result.difficulty)} · 60초 완주`; finishStars.textContent = `★ ${stars}`; finishGoals.replaceChildren();
+  [[true, '끝까지 완주했어요'], [stars >= 10, '별 10개를 모아요'], [result.bumps === 0, '덜컹 없이 도착해요'], [result.saves > 0, `보호막이 ${result.saves}번 지켜줬어요`]].forEach(([achieved, text]) => { const goal = el('p', achieved ? 'achieved' : ''); goal.append(el('span', '', achieved ? '✓' : '○'), document.createTextNode(String(text))); finishGoals.append(goal); });
   finishSave.textContent = stored ? `별 ${stars}개가 차고에 쏙! 지금까지 ${data.wallet}개 모았어요.` : `별 ${stars}개를 모았어요. 저장 공간이 없어 지금 창에서만 기억해요.`;
   resultOverlay.hidden = false; renderChoices(); live.textContent = `멋지게 도착! 별 ${stars}개를 모았어요.`; retryButton.focus();
 }
@@ -226,7 +257,7 @@ function startRun(): void {
   if (previousId !== profileId && previousId === 'guest' && !store.records[profileId]) store.records[profileId] = { ...recordFor(previousId), owned: [...recordFor(previousId).owned] };
   runProfileId = profileId; const data = record(); awarded = false; phase = 'playing'; lastSeconds = -1; lastProgress = undefined; starCount.dataset.goal = ''; starCount.textContent = '★ 0'; starCount.setAttribute('aria-label', '모은 별 0개'); timeLeft.textContent = '60'; raceProgress.value = 0;
   readyOverlay.hidden = pauseOverlay.hidden = resultOverlay.hidden = true; gentleMessage.hidden = true; clearTimeout(messageTimeout); courseDialog.close(); garageDialog.close(); setDriving(true); renderChoices();
-  audio.unlock(); audio.playMusic('challenge'); scene.startRun({ theme: data.theme, vehicle: data.vehicle }); live.textContent = '출발! 왼쪽, 오른쪽으로 움직여 별을 모아요.'; leftButton.focus({ preventScroll: true });
+  audio.unlock(); audio.playMusic('challenge'); scene.startRun({ theme: data.theme, vehicle: data.vehicle, difficulty: data.difficulty }); live.textContent = '출발! 왼쪽, 오른쪽으로 움직여 별을 모아요.'; leftButton.focus({ preventScroll: true });
 }
 function recordFor(id: string): RecordData { return store.records[id] ||= freshRecord(); }
 function pauseRun(): void {
@@ -238,7 +269,7 @@ function resumeRun(): void {
   phase = 'playing'; pauseOverlay.hidden = true; scene?.setPaused(false); audio.resume(); setDriving(true); leftButton.focus({ preventScroll: true });
 }
 function resetReady(): void {
-  audio.stop(); scene?.stop(); phase = 'ready'; awarded = false; readyOverlay.hidden = false; pauseOverlay.hidden = resultOverlay.hidden = true; gentleMessage.hidden = true; clearTimeout(messageTimeout); setDriving(false); timeLeft.textContent = '60'; starCount.textContent = '★ 0'; raceProgress.value = 0; renderChoices(); scene?.idle({ theme: record().theme, vehicle: record().vehicle }); startButton.focus({ preventScroll: true });
+  audio.stop(); scene?.stop(); phase = 'ready'; awarded = false; readyOverlay.hidden = false; pauseOverlay.hidden = resultOverlay.hidden = true; gentleMessage.hidden = true; clearTimeout(messageTimeout); setDriving(false); timeLeft.textContent = '60'; starCount.textContent = '★ 0'; raceProgress.value = 0; renderChoices(); scene?.idle({ theme: record().theme, vehicle: record().vehicle, difficulty: record().difficulty }); startButton.focus({ preventScroll: true });
 }
 function move(direction: -1 | 1): void { if (phase === 'playing') scene?.move(direction); }
 readyCard.addEventListener('submit', submit => { submit.preventDefault(); startRun(); });
@@ -246,7 +277,7 @@ nameInput.addEventListener('input', () => { nameError.textContent = ''; });
 nameInput.addEventListener('change', () => {
   if (phase !== 'ready') return;
   let name: string; try { name = normalizeName(nameInput.value); } catch { return; }
-  profileId = nameKey(name); const existing = saved.profiles.find(profile => profile.name === name); if (!store.records[profileId] && existing && store.records[existing.id]) store.records[profileId] = store.records[existing.id]; renderChoices(); scene?.idle({ theme: record().theme, vehicle: record().vehicle });
+  profileId = nameKey(name); const existing = saved.profiles.find(profile => profile.name === name); if (!store.records[profileId] && existing && store.records[existing.id]) store.records[profileId] = store.records[existing.id]; renderChoices(); scene?.idle({ theme: record().theme, vehicle: record().vehicle, difficulty: record().difficulty });
 });
 document.addEventListener('keydown', key => {
   if (app.querySelector('dialog[open]')) return;
@@ -270,4 +301,4 @@ canvasParent.addEventListener('pointercancel', () => { swipeStart = undefined; }
 for (const control of [leftButton, rightButton]) { control.addEventListener('pointerdown', () => control.classList.add('pressed')); ['pointerup', 'pointercancel', 'pointerleave', 'blur'].forEach(kind => control.addEventListener(kind, () => control.classList.remove('pressed'))); }
 window.addEventListener('blur', () => pauseRun()); document.addEventListener('visibilitychange', () => { if (document.hidden) pauseRun(); }); window.addEventListener('pagehide', () => { pauseRun(); audio.pause(); });
 renderChoices();
-void createKartGame(canvasParent, { update, event, end: finish }).then(result => { scene = result.scene; scene.idle({ theme: record().theme, vehicle: record().vehicle }); startButton.disabled = false; startButton.textContent = '씽씽! 출발하기 →'; }).catch(() => { startButton.textContent = '게임을 다시 불러와요'; startButton.disabled = false; startButton.type = 'button'; startButton.addEventListener('click', () => window.location.reload()); readyFootnote.textContent = '게임을 불러오지 못했어요. 버튼을 눌러 다시 시작해요.'; });
+void createKartGame(canvasParent, { update, event, end: finish }).then(result => { scene = result.scene; scene.idle({ theme: record().theme, vehicle: record().vehicle, difficulty: record().difficulty }); startButton.disabled = false; startButton.textContent = '씽씽! 출발하기 →'; }).catch(() => { startButton.textContent = '게임을 다시 불러와요'; startButton.disabled = false; startButton.type = 'button'; startButton.addEventListener('click', () => window.location.reload()); readyFootnote.textContent = '게임을 불러오지 못했어요. 버튼을 눌러 다시 시작해요.'; });

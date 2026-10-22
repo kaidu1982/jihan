@@ -158,7 +158,7 @@ export class StairScene extends Phaser.Scene {
       if (progress.worldId === 'forest' && i % 3 === 0) { g.fillStyle(0x7faf63, .8); g.fillEllipse(left + 11, y - 6, 17, 5); }
       if (progress.worldId === 'snow') { g.fillStyle(0xffffff, .85); g.fillRoundedRect(left + 2, y - 10, 70, 6, 3); }
       if (progress.worldId === 'space' && i % 3 === 0) { g.fillStyle(0xb0e4df, .85); g.fillCircle(left + 11, y + 9, 2); g.fillCircle(right - 11, y + 9, 2); }
-      if (i > score && (i + this.session.starOffset) % 10 === 0) {
+      if (this.session.collectStars && i > score && (i + this.session.starOffset) % 10 === 0) {
         const bob = this.reducedMotion ? 0 : Math.sin(time * .004 + i) * 3;
         g.fillStyle(p.glow, .18); g.fillCircle(x, y - 38 + bob, 17); star(g, x, y - 38 + bob, 11, p.glow);
       }
