@@ -5,6 +5,7 @@ import type { MiniGameDefinition } from './mini-types';
 const selection = new URLSearchParams(window.location.search).get('game');
 const miniGames: Record<string, () => Promise<{ default: MiniGameDefinition }>> = {
   dino: () => import('./dino'),
+  space: () => import('./space'),
 };
 const load = selection === 'stairs'
   ? import('./stairs')
