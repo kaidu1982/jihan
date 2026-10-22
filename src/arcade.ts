@@ -4,7 +4,7 @@ import { MINI_CARDS, renderMiniCard } from './mini-catalog';
 document.body.classList.add('arcade-page');
 document.title = '지한이의 작은 오락실 · 오늘은 어떤 모험을 할까?';
 
-const stairsArt = `<svg viewBox="0 0 520 280" aria-hidden="true" class="arcade-illustration">
+const stairsArt = `<svg preserveAspectRatio="xMidYMid slice" viewBox="0 0 520 280" aria-hidden="true" class="arcade-illustration">
   <defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#c3e8ea"/><stop offset="1" stop-color="#eff5d5"/></linearGradient></defs>
   <rect width="520" height="280" fill="url(#sky)"/>
   <circle cx="418" cy="57" r="32" fill="#fff2b8"/>
@@ -15,7 +15,7 @@ const stairsArt = `<svg viewBox="0 0 520 280" aria-hidden="true" class="arcade-i
   <g fill="#fff9e9" opacity=".9"><ellipse cx="448" cy="225" rx="25" ry="9"/><circle cx="438" cy="218" r="11"/><circle cx="452" cy="214" r="14"/><circle cx="465" cy="221" r="9"/></g>
 </svg><img class="arcade-stair-boy" src="/assets/jihan-climber.png" alt="구름 계단을 오르는 지한이" width="1280" height="1280" />`;
 
-const kartArt = `<svg viewBox="0 0 520 280" aria-hidden="true" class="arcade-illustration">
+const kartArt = `<svg preserveAspectRatio="xMidYMid slice" viewBox="0 0 520 280" aria-hidden="true" class="arcade-illustration">
   <rect width="520" height="280" fill="#e7eec9"/>
   <path d="M0 0h520v72Q404 32 288 76T0 48" fill="#d4e6c5"/>
   <path d="M225-30C380 61 110 113 268 300" fill="none" stroke="#fdf5dc" stroke-width="157"/>

@@ -7,6 +7,7 @@ const miniGames: Record<string, () => Promise<{ default: MiniGameDefinition }>> 
   dino: () => import('./dino'),
   space: () => import('./space'),
   maze: () => import('./maze'),
+  crossing: () => import('./crossing'),
 };
 const load = selection === 'stairs'
   ? import('./stairs')
