@@ -111,6 +111,9 @@ export class MazeSession implements MiniSession {
   readonly visited = new Set<string>();
   readonly minimumSteps: number;
   trailVisible = true;
+  readonly explored = new Set<string>();
+  mapCharges = 3;
+  private mapUntil = 0;
   hintPath: MazePoint[] = [];
   feedback = '반짝이는 열쇠를 찾아보자!';
   private feedbackUntil = 0;
@@ -123,7 +126,23 @@ export class MazeSession implements MiniSession {
     this.position = { ...this.maze.start };
     this.previousPosition = { ...this.position };
     this.visited.add(pointId(this.position));
+    this.revealSurroundings();
     this.minimumSteps = getMazePath(this.maze, this.maze.start, this.maze.key).length + getMazePath(this.maze, this.maze.key, this.maze.chest).length - 2;
+  }
+
+  get foggy(): boolean { return this.level > 0; }
+  get mapOpen(): boolean { return this.elapsed < this.mapUntil; }
+  get mapSeconds(): number { return Math.ceil(Math.max(0, this.mapUntil - this.elapsed) / 1000); }
+  isRevealed(point: MazePoint): boolean {
+    return !this.foggy || this.finished || this.mapOpen || this.explored.has(pointId(point)) || this.hintPath.some(item => sameMazePoint(item, point));
+  }
+  private revealSurroundings(): void {
+    const radius = this.level === 1 ? 2 : 1;
+    for (let y = this.position.y - radius; y <= this.position.y + radius; y++) {
+      for (let x = this.position.x - radius; x <= this.position.x + radius; x++) {
+        if (x >= 0 && y >= 0 && x < this.maze.size && y < this.maze.size) this.explored.add(pointId({ x, y }));
+      }
+    }
   }
 
   advance(deltaMs: number): void {
@@ -154,6 +173,13 @@ export class MazeSession implements MiniSession {
 
   act(action: MiniAction): void {
     if (this.finished) return;
+    if (action === 'map') {
+      if (!this.foggy) this.say('꽃잎 정원은 안개 없이 환하게 보여요!');
+      else if (this.mapOpen) this.say(`아직 ${this.mapSeconds}초 동안 환하게 볼 수 있어요!`);
+      else if (this.mapCharges === 0) this.say('안개 걷기를 다 썼어요. 무료 길 힌트는 언제든 눌러요!');
+      else { this.mapCharges--; this.mapUntil = this.elapsed + 5000; this.say(`5초 동안 안개가 걷혔어요! ${this.mapCharges}번 남았어요.`); }
+      return;
+    }
     if (action === 'trail') {
       this.trailVisible = !this.trailVisible;
       this.say(this.trailVisible ? '내가 지나온 길에 발자국이 보여요!' : '발자국을 잠시 숨겼어요. 다시 누르면 보여요.');
@@ -175,6 +201,7 @@ export class MazeSession implements MiniSession {
     this.previousPosition = { ...this.position };
     this.position = next;
     this.visited.add(pointId(next));
+    this.revealSurroundings();
     this.movementAge = 0;
     this.steps++;
     if (this.hintPath.length) {
@@ -208,7 +235,7 @@ export class MazeSession implements MiniSession {
       score: this.steps, stars: this.stars,
       progress: this.finished ? 1 : .1 + (this.hasKey ? .5 : 0) + .25 * this.collectedGems.size / this.maze.gems.length,
       label: `${this.steps}걸음`,
-      detail: this.finished ? '보물 찾기 성공!' : this.hasKey ? '🔑 열쇠 찾음 · 보물상자를 열자!' : '🔑 열쇠를 먼저 찾아보자!',
+      detail: this.finished ? '보물 찾기 성공!' : `${this.hasKey ? '🔑 열쇠 찾음 · 보물상자로!' : '🔑 열쇠를 먼저 찾아요!'}${this.foggy ? this.mapOpen ? ` · ☀ ${this.mapSeconds}초` : ` · ☀ ${this.mapCharges}번` : ''}`,
       finished: this.finished, won: this.finished,
       summary: this.finished ? `${this.steps}걸음으로 보물을 찾았어! 보석 ${this.collectedGems.size}개와 완주 별 5개를 모았어.` : '시간 제한 없이 천천히 탐험해요.',
       feedback: this.feedback,

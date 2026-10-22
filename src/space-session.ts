@@ -4,6 +4,8 @@ export const SPACE_DURATION_MS = 54_000;
 export const SPACE_LOOKAHEAD_MS = 6_000;
 export const SPACE_SIGNAL_RANGE_MS = 1_000;
 export const SPACE_SIGNAL_CHARGES = 3;
+export const SPACE_COMBO_SIZE = 3;
+export const SPACE_COMBO_REWARD = 2;
 export type SpaceObject = {
   id: number;
   wave: number;
@@ -54,6 +56,10 @@ export class SpaceSession implements MiniSession {
   lane = 1;
   targetLane = 1;
   rescued = 0;
+  combo = 0;
+  bestCombo = 0;
+  comboBonusStars = 0;
+  comboBonusUntil = 0;
   stars = 0;
   bumps = 0;
   signalsRemaining = SPACE_SIGNAL_CHARGES;
@@ -96,12 +102,10 @@ export class SpaceSession implements MiniSession {
         this.announce('친구가 우주선 가까이 오면 구조 신호를 보내요!', 1_300);
         return;
       }
-      target.outcome = 'collected';
       this.signalsRemaining--;
       this.signalledRescues++;
-      this.rescued++;
+      this.rescue(target, true);
       this.signalRescue = { variant: target.variant, lane: target.lane, arrivalAt: target.arrivalAt, startedAt: this.elapsed };
-      this.announce(`구조 신호 도착! 친구가 왔어 · ${this.signalsRemaining}번 남음`, 1_600);
     }
   }
 
@@ -125,7 +129,9 @@ export class SpaceSession implements MiniSession {
         const radius = object.kind === 'meteor' ? .39 : .49;
         if (Math.abs(crossingLane - object.lane) > radius) {
           object.outcome = 'missed';
+          if (object.kind === 'friend') this.breakCombo();
         } else if (object.kind === 'meteor') {
+          this.breakCombo();
           if (object.arrivalAt < this.shieldUntil) object.outcome = 'shielded';
           else {
             object.outcome = 'bumped';
@@ -134,11 +140,10 @@ export class SpaceSession implements MiniSession {
             this.announce('보호막이 지켜줬어! 계속 날아가자', 1_800);
           }
         } else {
-          object.outcome = 'collected';
           if (object.kind === 'friend') {
-            this.rescued++;
-            this.announce(`친구 구조! ${this.rescued}명이 함께해`, 1_600);
+            this.rescue(object, false);
           } else {
+            object.outcome = 'collected';
             this.stars++;
             this.announce('반짝! 별을 모았어', 700);
           }
@@ -153,6 +158,27 @@ export class SpaceSession implements MiniSession {
     }
   }
 
+  /** Both ways of rescuing a friend share one receipt and one combo reward. */
+  private rescue(object: SpaceObject, signalled: boolean): void {
+    if (this.finished || object.kind !== 'friend' || object.outcome !== 'pending') return;
+    object.outcome = 'collected';
+    this.rescued++;
+    this.combo++;
+    this.bestCombo = Math.max(this.bestCombo, this.combo);
+    const bonus = this.combo % SPACE_COMBO_SIZE === 0;
+    if (bonus) {
+      this.stars += SPACE_COMBO_REWARD;
+      this.comboBonusStars += SPACE_COMBO_REWARD;
+      this.comboBonusUntil = this.elapsed + 1_500;
+    }
+    this.announce(`${signalled ? '구조 신호 도착!' : '친구 구조!'} ${this.combo}명 연속${bonus ? ' · 함께해서 별 +2!' : ` · ${this.rescued}명이 함께해`}`, 1_600);
+  }
+
+  private breakCombo(): void {
+    if (this.combo > 0) this.announce('다시 친구들을 이어 보자! 모은 별은 그대로야', 1_400);
+    this.combo = 0;
+  }
+
   private announce(message: string, duration: number): void {
     this.feedback = message;
     this.feedbackUntil = this.elapsed + duration;
@@ -165,12 +191,12 @@ export class SpaceSession implements MiniSession {
       stars: this.stars,
       progress: Math.min(1, this.elapsed / this.duration),
       label: `${Math.ceil(Math.max(0, this.duration - this.elapsed) / 1000)}초`,
-      detail: `친구 ${this.rescued}명 / ${totalFriends}명 · 신호 ${this.signalsRemaining}번${this.signalsRemaining > 0 && this.signalTarget ? ' · 지금 구조 가능!' : ''}`,
+      detail: `구조 ${this.rescued}/${totalFriends} · ${this.combo}명 연속 · 신호 ${this.signalsRemaining}번${this.signalsRemaining > 0 && this.signalTarget ? ' · 지금 구조 가능!' : ''}`,
       finished: this.finished,
       won: this.finished && this.rescued >= 3,
       summary: this.rescued >= 3
-        ? `우주 정거장 도착! 친구 ${this.rescued}명을 데려왔어. 별 ${this.stars}개도 모았어!`
-        : `우주 정거장 도착! 친구 ${this.rescued}명과 별 ${this.stars}개를 만났어. 다음 탐험에서는 친구 3명 구조에 도전하자!`,
+        ? `우주 정거장 도착! 친구 ${this.rescued}명을 데려왔어. 최고 ${this.bestCombo}명 연속 구조! 별 ${this.stars}개 중 함께 모은 보너스는 ${this.comboBonusStars}개야.`
+        : `우주 정거장 도착! 친구 ${this.rescued}명과 별 ${this.stars}개를 만났어. 최고 ${this.bestCombo}명 연속 구조! 다음 탐험에서는 친구 3명 구조에 도전하자!`,
       feedback: this.elapsed < this.feedbackUntil ? this.feedback : undefined,
       mistakes: this.bumps,
       objectives: [

@@ -9,7 +9,9 @@ import { JourneyBook } from './journey';
 import { deleteKartProgress } from './kart-storage';
 import { deleteMiniProgress } from './mini-storage';
 import { STAIRS_LESSON, lessonCue } from './stairs-lesson';
+import { PracticeGoalStore, PRACTICE_GOALS, DEFAULT_PRACTICE_GOAL, isPracticeGoal, nextPracticeGoal, practiceGoalLabel, practiceRunOptions, type PracticeGoal } from './stairs-practice';
 import './stairs-lesson.css';
+import './stairs-practice.css';
 
 document.body.classList.add('stairs-page');
 document.title = '지한이의 무한계단 · 작은 오락실';
@@ -71,12 +73,17 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 `;
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
+$('#mode-description').insertAdjacentHTML('afterend', `<fieldset id="practice-goals" class="stairs-practice-goals" hidden><legend>오늘은 어디까지 올라갈까요?</legend><div>${PRACTICE_GOALS.map(goal => `<button type="button" data-practice-goal="${goal}" aria-pressed="false">${practiceGoalLabel(goal)}</button>`).join('')}</div></fieldset>`);
+$('#step-hint').insertAdjacentHTML('afterend', '<div id="practice-progress" class="stairs-practice-progress" role="progressbar" aria-label="연습 목표" aria-valuemin="0" hidden><div id="practice-progress-fill"></div><span id="practice-progress-copy"></span></div>');
 let scene: StairScene;
 let mode: GameMode = 'challenge';
 let selectedStage = ADVENTURE_STAGES[0].id;
 const progressStore = new ProgressStore();
+const practiceGoals = new PracticeGoalStore();
+let practiceGoal: PracticeGoal = DEFAULT_PRACTICE_GOAL;
+let pendingPracticeGoal: PracticeGoal | undefined;
 let journey: JourneyBook;
-let currentRun: { id: string; lesson: boolean; mode: GameMode; dateKey: string; stageId?: string; stars: number; awards: string[]; closed: boolean; stored: boolean; world?: string; dailyBestAtStart: number } | undefined;
+let currentRun: { id: string; lesson: boolean; mode: GameMode; dateKey: string; stageId?: string; practiceGoal?: PracticeGoal; stars: number; awards: string[]; closed: boolean; stored: boolean; world?: string; dailyBestAtStart: number } | undefined;
 let runProfile: Profile | undefined;
 let ticket: Ticket | undefined;
 let screen: 'start' | 'playing' | 'paused' | 'result' = 'start';
@@ -112,6 +119,7 @@ function updateProfile(): void {
   $('#header-name').textContent = profile?.name || '플레이어';
   $('#personal-best').textContent = (mode === 'practice' ? profile?.practiceBest : profile?.best)?.toLocaleString() || '0';
   if (profile) $('#player-name').setAttribute('value', profile.name);
+  practiceGoal = pendingPracticeGoal ?? practiceGoals.get($<HTMLInputElement>('#player-name').value || profile?.name || '');
   $('#welcome-title').textContent = profile ? '오늘도 한 계단 더!' : '어떤 이름으로 놀까요?';
   if (!progressStore.isStageUnlocked(profile?.id || 'preview', selectedStage)) selectedStage = ADVENTURE_STAGES[0].id;
   updateMode(); journey?.refresh();
@@ -121,13 +129,16 @@ function updateMode(): void {
   document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === mode)));
   const descriptions: Record<GameMode, string> = {
     challenge: '50계단마다 새로운 풍경! 최고 기록에 도전해요.',
-    practice: '시간도 실수도 걱정 없이, 다섯 세상을 둘러봐요.',
+    practice: '시간도 실수도 걱정 없어요. 나에게 맞는 완주 목표를 골라요.',
     adventure: '시간 제한 없이 완주해요. 실수 기회는 세 번!',
     daily: `${seoulDateKey()} · 모두 같은 150계단 · 내 최고 ${progressStore.get(activeProfile()?.id || 'preview').daily.best}`,
   };
   $('#mode-description').textContent = descriptions[mode];
   $('#stage-select').hidden = mode !== 'adventure';
   $('#stage-select').textContent = `${worldById(stage.worldId).icon} ${stage.title} · ${stage.goal}계단  ›`;
+  $('#practice-goals').hidden = mode !== 'practice';
+  $('#lesson-start').hidden = mode === 'practice';
+  document.querySelectorAll<HTMLButtonElement>('[data-practice-goal]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.practiceGoal === String(practiceGoal))));
 }
 function chooseMode(value: GameMode, stageId?: string): void {
   if (starting) return;
@@ -178,6 +189,19 @@ function setScreen(value: typeof screen): void {
   if (value === 'paused') sound.pause();
   else if (value === 'start' || value === 'result') sound.stop();
   updateLessonGuide();
+  updatePracticeProgress();
+}
+function updatePracticeProgress(): void {
+  const goal = currentRun?.practiceGoal;
+  const visible = currentRun?.mode === 'practice' && !isLesson() && typeof goal === 'number' && screen !== 'start';
+  $('#practice-progress').hidden = !visible;
+  if (!visible || typeof goal !== 'number' || !scene) return;
+  const score = Math.min(goal, scene.getProgress().score);
+  $('#practice-progress').setAttribute('aria-valuemax', String(goal));
+  $('#practice-progress').setAttribute('aria-valuenow', String(score));
+  $('#practice-progress').setAttribute('aria-valuetext', `${goal}계단 중 ${score}계단`);
+  $('#practice-progress-fill').style.width = `${score / goal * 100}%`;
+  $('#practice-progress-copy').textContent = score === goal ? '목표 완주! 참 잘했어요 ✦' : `목표까지 ${goal - score}계단`;
 }
 function updateLessonGuide(): void {
   const visible = isLesson() && screen === 'playing';
@@ -234,14 +258,16 @@ async function startRun(lesson = false): Promise<void> {
   sound.stop(); sound.unlock(); sound.prepare(runMode);
   $('#name-error').textContent = ''; starting = true;
   submissionSequence++;
-  document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], #result-home, #journey-open, #missions-open, #stage-select, #next-stage, #lesson-start').forEach(button => { button.disabled = true; });
+  document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], [data-practice-goal], #result-home, #journey-open, #missions-open, #stage-select, #next-stage, #lesson-start').forEach(button => { button.disabled = true; });
   $<HTMLInputElement>('#player-name').disabled = true;
   $('#start-button').textContent = '계단을 준비하고 있어요…';
   $<HTMLButtonElement>('#start-button').disabled = true;
   $<HTMLButtonElement>('#retry-button').disabled = true;
+  savePendingPracticeGoal(name);
   runProfile = selectProfile(name); updateProfile();
   if (mode === 'adventure' && !progressStore.isStageUnlocked(runProfile.id, selectedStage)) selectedStage = ADVENTURE_STAGES[0].id;
-  currentRun = { id: createProgressRunId(), lesson, mode: lesson ? 'practice' : mode, dateKey: seoulDateKey(), stageId: mode === 'adventure' ? selectedStage : undefined, stars: 0, awards: [], closed: false, stored: true, dailyBestAtStart: progressStore.get(runProfile.id).daily.best };
+  if (!lesson && mode === 'practice') practiceGoals.select(name, practiceGoal);
+  currentRun = { id: createProgressRunId(), lesson, mode: lesson ? 'practice' : mode, dateKey: seoulDateKey(), stageId: mode === 'adventure' ? selectedStage : undefined, practiceGoal: !lesson && mode === 'practice' ? practiceGoal : undefined, stars: 0, awards: [], closed: false, stored: true, dailyBestAtStart: progressStore.get(runProfile.id).daily.best };
   ticket = undefined;
   if (!lesson && mode === 'challenge') {
     try { ticket = await api.start(runProfile.id, name); }
@@ -250,18 +276,18 @@ async function startRun(lesson = false): Promise<void> {
   const stage = selectedAdventure();
   const seed = lesson ? STAIRS_LESSON.seed : mode === 'daily' ? dailySeed(currentRun.dateKey) : mode === 'adventure' ? stage.seed : ticket?.seed ?? crypto.getRandomValues(new Uint32Array(1))[0];
   scene.startRun(seed, runMode, {
-    ...(lesson ? STAIRS_LESSON.options : mode === 'adventure' ? { world: stage.worldId, goal: stage.goal, mistakeLimit: 3 } : mode === 'daily' ? { goal: 150 } : {}),
+    ...(lesson ? STAIRS_LESSON.options : mode === 'adventure' ? { world: stage.worldId, goal: stage.goal, mistakeLimit: 3 } : mode === 'daily' ? { goal: 150 } : mode === 'practice' ? practiceRunOptions(practiceGoal) : {}),
     companion: progressStore.get(runProfile.id).equippedCompanion,
     starOffset: lesson ? 0 : progressStore.get(runProfile.id).totalStairs % 10,
   }); setScreen('playing');
   $<HTMLInputElement>('#player-name').blur();
   $('#mode-badge').textContent = lesson ? '🎓 조작 교실' : { practice: '☁ 연습', challenge: '⚡ 무한 도전', adventure: '🗺️ 세계 모험', daily: '☀️ 오늘의 계단' }[mode];
-  $('#score-unit').textContent = lesson ? `/ ${STAIRS_LESSON.goal} 계단` : mode === 'adventure' ? `/ ${stage.goal} 계단` : mode === 'daily' ? '/ 150 계단' : '계단';
+  $('#score-unit').textContent = lesson ? `/ ${STAIRS_LESSON.goal} 계단` : mode === 'adventure' ? `/ ${stage.goal} 계단` : mode === 'daily' ? '/ 150 계단' : mode === 'practice' && typeof practiceGoal === 'number' ? `/ ${practiceGoal} 계단` : '계단';
   $('#below-game').textContent = lesson ? '반짝이는 버튼을 눌러 두 가지 조작을 배워요. 틀려도 괜찮아요!' : runMode === 'practice' ? '다음 계단 힌트를 보고 천천히 올라가요.' : '반대쪽 계단이 보이면 방향 바꾸기!';
   $('#energy-fill').parentElement!.classList.toggle('practice-energy', runMode === 'practice');
   $('#step-hint').hidden = lesson || runMode !== 'practice';
   starting = false;
-  document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], #result-home, #journey-open, #missions-open, #stage-select, #next-stage, #lesson-start').forEach(button => { button.disabled = false; });
+  document.querySelectorAll<HTMLButtonElement>('.site-header button, [data-mode], [data-practice-goal], #result-home, #journey-open, #missions-open, #stage-select, #next-stage, #lesson-start').forEach(button => { button.disabled = false; });
   $<HTMLInputElement>('#player-name').disabled = false;
   $('#start-button').innerHTML = '올라가 볼까? <span>↗</span>';
   $<HTMLButtonElement>('#start-button').disabled = false;
@@ -298,20 +324,22 @@ async function endRun(result: RunResult): Promise<void> {
   const normalMode = playedMode === 'challenge' || playedMode === 'practice';
   const { newBest, stored } = normalMode ? rememberScore(profile, result.mode, result.score) : { newBest: playedMode === 'daily' && result.score > oldDailyBest, stored: currentRun?.stored ?? false };
   const cleared = playedMode === 'adventure' && result.reason === 'finished';
+  const practiceCleared = playedMode === 'practice' && result.reason === 'finished' && typeof currentRun?.practiceGoal === 'number';
   updateProfile(); setScreen('result');
   $('#result-score').textContent = result.score.toLocaleString();
-  $('#result-kicker').textContent = cleared ? '모험 완주! 참 잘했어요 ✦' : newBest ? '새로운 최고 기록!' : '아주 멋진 도전!';
-  $('#result-copy').textContent = cleared ? `${worldById(selectedAdventure().worldId).name}에서 멋진 추억을 만들었어요.` : result.reason === 'wrong' ? playedMode === 'adventure' ? '세 번의 연습을 마쳤어요. 다음에는 더 높이!' : '반대쪽 계단에서는 방향을 바꿔봐요!' : result.reason === 'time' ? '한 계단 더! 다시 도전해 볼까요?' : '끝까지 올라왔어요. 정말 대단해요!';
+  $('#result-kicker').textContent = practiceCleared ? `${currentRun?.practiceGoal}계단 목표 완주! ✦` : cleared ? '모험 완주! 참 잘했어요 ✦' : newBest ? '새로운 최고 기록!' : '아주 멋진 도전!';
+  $('#result-copy').textContent = practiceCleared ? '내 속도로 한 계단씩, 끝까지 올라왔어요. 참 잘했어요!' : cleared ? `${worldById(selectedAdventure().worldId).name}에서 멋진 추억을 만들었어요.` : result.reason === 'wrong' ? playedMode === 'adventure' ? '세 번의 연습을 마쳤어요. 다음에는 더 높이!' : '반대쪽 계단에서는 방향을 바꿔봐요!' : result.reason === 'time' ? '한 계단 더! 다시 도전해 볼까요?' : '끝까지 올라왔어요. 정말 대단해요!';
   $('#result-rewards').textContent = `✦ ${currentRun?.stars || 0}별을 모았어요${currentRun?.awards.length ? ` · 새 배지 ${currentRun.awards.length}개` : ''}`;
   $('#result-best-label').textContent = playedMode === 'adventure' ? '완주한 모험' : playedMode === 'daily' ? `${currentRun?.dateKey.slice(5)} 최고` : '나의 최고';
   $('#result-best').textContent = playedMode === 'adventure' ? `${progressStore.get(profile.id).completedStages.length} / 5` : `${playedMode === 'daily' ? Math.max(oldDailyBest, result.score) : result.mode === 'practice' ? profile.practiceBest : profile.best} 계단`;
   $('#save-status').textContent = stored && currentRun?.stored ? normalMode ? '기록과 모은 별을 이 기기에 저장했어요.' : '모험 기록은 이 브라우저에 저장했어요.' : '브라우저 저장 공간을 사용할 수 없어요.';
-  $('#next-stage').textContent = '다음 모험으로 ↗';
-  $('#retry-button').innerHTML = '한 번 더! <span>↗</span>';
+  const nextGoal = practiceCleared ? nextPracticeGoal(currentRun!.practiceGoal!) : undefined;
+  $('#next-stage').textContent = nextGoal ? `${practiceGoalLabel(nextGoal)}에도 도전해 볼까? ↗` : '다음 모험으로 ↗';
+  $('#retry-button').innerHTML = practiceCleared ? `${currentRun?.practiceGoal}계단 다시 하기 <span>↗</span>` : '한 번 더! <span>↗</span>';
   const stageIndex = ADVENTURE_STAGES.findIndex(stage => stage.id === currentRun?.stageId);
-  $('#next-stage').hidden = !cleared || stageIndex >= ADVENTURE_STAGES.length - 1;
+  $('#next-stage').hidden = !nextGoal && (!cleared || stageIndex >= ADVENTURE_STAGES.length - 1);
   $('#retry-button').classList.toggle('secondary-retry', !$('#next-stage').hidden);
-  sound.tone(newBest || cleared ? 'record' : 'end');
+  sound.tone(newBest || cleared || practiceCleared ? 'record' : 'end');
   if (playedMode === 'challenge' && runTicket && result.score > 0) {
     $('#save-status').textContent = '순위표에 기록을 확인하고 있어요…';
     try {
@@ -343,12 +371,45 @@ function openDialog(id: string): void { pause(); $<HTMLDialogElement>(id).showMo
 function act(action: Action): void { if (screen === 'playing') scene.act(action); }
 
 $('#start-form').addEventListener('submit', event => { event.preventDefault(); void startRun(); });
+function savePendingPracticeGoal(name: string): void {
+  if (pendingPracticeGoal === undefined) return;
+  try { normalizeName(name); } catch { return; }
+  if (!practiceGoals.select(name, pendingPracticeGoal)) toast('목표는 선택했어요. 이 기기에 저장하지 못했어요.');
+  pendingPracticeGoal = undefined;
+}
+$('#player-name').addEventListener('input', () => {
+  practiceGoal = pendingPracticeGoal ?? practiceGoals.get($<HTMLInputElement>('#player-name').value);
+  updateMode();
+});
+$('#player-name').addEventListener('change', () => savePendingPracticeGoal($<HTMLInputElement>('#player-name').value));
+document.querySelectorAll<HTMLButtonElement>('[data-practice-goal]').forEach(button => button.addEventListener('click', () => {
+  if (screen !== 'start' || starting) return;
+  const value: unknown = button.dataset.practiceGoal === 'endless' ? 'endless' : Number(button.dataset.practiceGoal);
+  if (!isPracticeGoal(value)) return;
+  practiceGoal = value;
+  const name = $<HTMLInputElement>('#player-name').value;
+  try {
+    normalizeName(name);
+    pendingPracticeGoal = undefined;
+    if (!practiceGoals.select(name, practiceGoal)) toast('목표는 선택했어요. 이 기기에 저장하지 못했어요.');
+  } catch { pendingPracticeGoal = practiceGoal; }
+  updateMode();
+}));
 $('#lesson-start').addEventListener('click', () => void startRun(true));
 $('#retry-button').addEventListener('click', () => void startRun(isLesson()));
 $('#result-home').addEventListener('click', home);
 $('#pause-home').addEventListener('click', home);
 $('#next-stage').addEventListener('click', () => {
   if (isLesson()) { chooseMode('adventure', ADVENTURE_STAGES[0].id); void startRun(); return; }
+  if (currentRun?.mode === 'practice' && currentRun.practiceGoal !== undefined) {
+    const next = nextPracticeGoal(currentRun.practiceGoal);
+    if (next && runProfile) {
+      practiceGoals.select(runProfile.name, next);
+      chooseMode('practice');
+      void startRun();
+    }
+    return;
+  }
   const index = ADVENTURE_STAGES.findIndex(stage => stage.id === currentRun?.stageId);
   const next = ADVENTURE_STAGES[index + 1];
   if (next) { chooseMode('adventure', next.id); void startRun(); }
@@ -423,6 +484,7 @@ $('#delete-profile').addEventListener('click', async () => {
     if (!progressStore.deleteProfileProgress(profile.id)) throw new Error('서버 기록은 지웠지만 기기의 모험 기록을 지우지 못했어요. 브라우저 저장 공간을 확인하고 다시 시도해 주세요.');
     if (!deleteKartProgress(profile.id, profile.name)) throw new Error('기기의 미니 카트 기록을 지우지 못했어요. 브라우저 저장 공간을 확인하고 다시 시도해 주세요.');
     if (!deleteMiniProgress(profile.name)) throw new Error('기기의 미니 모험 기록을 지우지 못했어요. 브라우저 저장 공간을 확인하고 다시 시도해 주세요.');
+    if (!practiceGoals.delete(profile.name)) throw new Error('기기의 연습 목표를 지우지 못했어요. 브라우저 저장 공간을 확인하고 다시 시도해 주세요.');
     const previousProfiles = saved.profiles, previousId = saved.activeId;
     saved.profiles = saved.profiles.filter(p => p.id !== profile.id); saved.activeId = saved.profiles[0]?.id || '';
     if (!persist()) {
@@ -462,6 +524,7 @@ createGame($('#game-canvas'), {
     $('#step-hint').textContent = detail.nextAction === 'turn' ? '↶ 다음은 방향 바꾸기' : '↑ 다음은 오르기';
     $('#step-hint').dataset.action = detail.nextAction;
     updateLessonGuide();
+    updatePracticeProgress();
     document.querySelector('.game-shell')!.setAttribute('data-world', detail.worldId);
     if (currentRun) {
       if (currentRun.world && currentRun.world !== detail.worldId) message(`${world.icon} ${world.name}에 도착했어요!`);

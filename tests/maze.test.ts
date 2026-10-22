@@ -184,3 +184,37 @@ test('a visible directional hint follows a corner instead of keeping the previou
   assert.deepEqual(run.hintPath[1], { x: 3, y: 2 });
   assert.match(run.feedback, /다음은 아래쪽/);
 });
+test('the first garden stays clear while forest fog remembers explored surroundings', () => {
+  const first = new MazeSession({ seed: 312, level: 0 });
+  assert.equal(first.isRevealed(first.maze.chest), true);
+  first.act('map'); assert.equal(first.mapCharges, 3); assert.equal(first.mapOpen, false);
+  const forest = new MazeSession({ seed: 312, level: 2 });
+  assert.equal(forest.isRevealed(forest.position), true);
+  assert.equal(forest.isRevealed(forest.maze.key), false);
+  const origin = { ...forest.position };
+  walk(forest, forest.maze.key);
+  assert.ok(forest.explored.size > 9);
+  assert.equal(forest.isRevealed(origin), true);
+  forest.act('trail'); assert.equal(forest.isRevealed(origin), true);
+});
+test('three five-second map uses respect active time, do not stack or spend on invalid actions, and preserve rewards', () => {
+  const run = new MazeSession({ seed: 312, level: 2 }), hidden = run.maze.key;
+  for (let charge = 2; charge >= 0; charge--) {
+    const before = run.getStatus(); run.act('map');
+    assert.equal(run.mapCharges, charge); assert.equal(run.mapOpen, true); assert.equal(run.isRevealed(hidden), true);
+    run.act('map'); assert.equal(run.mapCharges, charge);
+    for (const delta of [0, NaN, Infinity, -100]) run.advance(delta);
+    assert.equal(run.mapSeconds, 5);
+    run.advance(4999); assert.equal(run.mapOpen, true);
+    run.advance(1); assert.equal(run.mapOpen, false); assert.equal(run.isRevealed(hidden), false);
+    assert.equal(run.steps, before.score); assert.equal(run.stars, before.stars);
+  }
+  run.act('map'); assert.equal(run.mapOpen, false); assert.equal(run.mapCharges, 0);
+  assert.match(run.feedback, /무료 길 힌트/);
+  run.act('hint'); assert.ok(run.hintPath.every(point => run.isRevealed(point)));
+  walk(run, run.maze.key); walk(run, run.maze.chest);
+  assert.ok(run.getStatus().objectives!.every(item => item.done));
+  const final = run.getStatus(); run.act('map'); run.advance(9999); assert.deepEqual(run.getStatus(), final);
+  assert.equal(run.isRevealed(originPoint(run.maze.size)), true);
+});
+function originPoint(size: number): MazePoint { return { x: size - 1, y: size - 1 }; }

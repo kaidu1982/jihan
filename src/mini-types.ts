@@ -1,5 +1,5 @@
 export type MiniGameId = 'dino' | 'space' | 'maze' | 'crossing';
-export type MiniAction = 'left' | 'right' | 'up' | 'down' | 'jump' | 'hint' | 'signal' | 'trail';
+export type MiniAction = 'left' | 'right' | 'up' | 'down' | 'jump' | 'hint' | 'signal' | 'trail' | 'map';
 export type MiniObjective = { id: string; label: string; done: boolean };
 export type MiniOptions = { seed: number; level: number; character: string };
 export type MiniStatus = {
@@ -32,7 +32,7 @@ export type MiniGameDefinition = {
   startLabel: string;
   scoreUnit: string;
   instructions: { icon: string; title: string; copy: string }[];
-  controls: { action: MiniAction; label: string; icon: string; keys: string[] }[];
+  controls: { action: MiniAction; label: string; icon: string; keys: string[]; placement?: 'toolbar' }[];
   stages?: { name: string; icon: string; copy: string }[];
   characters?: { id: string; name: string; icon: string; cost: number }[];
   create(options: MiniOptions): MiniSession;

@@ -161,6 +161,13 @@ function drawMaze(ctx: CanvasRenderingContext2D, rawSession: MiniSession, frame:
   if (!session.hasKey) drawKey(ctx, keyX, keyY, tile * .75, motion);
   const [chestX, chestY] = center(maze.chest);
   drawChest(ctx, chestX, chestY, tile * .85, session.finished, session.hasKey);
+  for (let y = 0; y < maze.size; y++) for (let x = 0; x < maze.size; x++) {
+    if (session.isRevealed({ x, y })) continue;
+    const px = left + x * tile, py = top + y * tile;
+    ctx.fillStyle = '#e3e9e3'; ctx.fillRect(px - .5, py - .5, tile + 1, tile + 1);
+    circle(ctx, px + tile * .3, py + tile * .35, tile * .25, '#f0f3ed');
+    circle(ctx, px + tile * .65, py + tile * .6, tile * .29, '#edf1e9');
+  }
   const movement = frame.reducedMotion || session.finished ? 1 : Math.min(1, session.movementAge / 85);
   const eased = 1 - (1 - movement) ** 2;
   const visual = { x: session.previousPosition.x + (session.position.x - session.previousPosition.x) * eased, y: session.previousPosition.y + (session.position.y - session.previousPosition.y) * eased };
@@ -187,7 +194,7 @@ const maze: MiniGameDefinition = {
   instructions: [
     { icon: '👆', title: '한 칸씩 움직여요', copy: '방향 버튼이나 키보드 방향키로 정원 길을 걸어요.' },
     { icon: '🔑', title: '열쇠를 먼저 찾아요', copy: '황금 열쇠를 주운 뒤 보물상자에 도착하면 성공!' },
-    { icon: '👣', title: '지나온 길을 기억해요', copy: '발자국을 켜고 끌 수 있어요. 길이 헷갈리면 무료 힌트를 눌러봐요.' },
+    { icon: '☀', title: '안개 속에서도 천천히', copy: '숲에서는 걸어간 주변이 보여요. 안개 걷기는 5초씩 세 번, 무료 길 힌트는 언제든 써요.' },
   ],
   controls: [
     { action: 'up', label: '위로', icon: '↑', keys: ['ArrowUp', 'KeyW'] },
@@ -195,12 +202,13 @@ const maze: MiniGameDefinition = {
     { action: 'down', label: '아래로', icon: '↓', keys: ['ArrowDown', 'KeyS'] },
     { action: 'right', label: '오른쪽', icon: '→', keys: ['ArrowRight', 'KeyD'] },
     { action: 'hint', label: '길 힌트', icon: '✨', keys: ['KeyH'] },
-    { action: 'trail', label: '발자국', icon: '👣', keys: ['KeyT'] },
+    { action: 'map', label: '안개 걷기', icon: '☀', keys: ['KeyM'] },
+    { action: 'trail', label: '발자국', icon: '👣', keys: ['KeyT'], placement: 'toolbar' },
   ],
   stages: [
     { name: '꽃잎 정원', icon: '🌼', copy: '작은 7칸 정원 · 보석 3개' },
-    { name: '버섯 숲길', icon: '🍄', copy: '갈림길이 늘어난 9칸 정원 · 보석 4개' },
-    { name: '비밀의 정원', icon: '🌳', copy: '넓은 11칸 정원 · 보석 5개' },
+    { name: '버섯 숲길', icon: '🍄', copy: '옅은 안개 속 9칸 숲 · 보석 4개' },
+    { name: '비밀의 정원', icon: '🌳', copy: '짙은 안개 속 11칸 정원 · 보석 5개' },
   ],
   characters: [
     { id: 'child', name: '꼬마 탐험가', icon: '🧒', cost: 0 },

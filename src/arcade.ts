@@ -39,11 +39,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="arcade-games" aria-label="게임 고르기">
       <a class="arcade-game arcade-stairs" href="/?game=stairs" aria-label="무한계단 게임 시작">
         <div class="arcade-art">${stairsArt}<span class="arcade-art-tag">☁ 다섯 세상 모험</span></div>
-        <div class="arcade-game-copy"><div class="arcade-game-meta"><span>차곡차곡, 구름 위로</span><span aria-hidden="true">01</span></div><h2>무한계단</h2><p>두 버튼으로 한 계단씩!<br>지한이와 하늘 끝까지 올라가요.</p><div class="arcade-card-bottom"><span class="arcade-control-hint">↶ 방향 바꾸기 <b>·</b> ↑ 오르기</span><span class="arcade-play">놀러 가기 <b aria-hidden="true">↗</b></span></div></div>
+        <div class="arcade-game-copy"><div class="arcade-game-meta"><span>차곡차곡, 구름 위로</span><span aria-hidden="true">01</span></div><h2>무한계단</h2><p>처음에는 20계단부터!<br>두 버튼으로 내 속도에 맞춰 올라요.</p><div class="arcade-card-bottom"><span class="arcade-control-hint">↶ 방향 바꾸기 <b>·</b> ↑ 오르기</span><span class="arcade-play">놀러 가기 <b aria-hidden="true">↗</b></span></div></div>
       </a>
       <a class="arcade-game arcade-kart" href="/?game=kart" aria-label="미니 카트 게임 시작">
         <div class="arcade-art">${kartArt}<span class="arcade-art-tag">🏁 1분 드라이브</span><span class="arcade-new">NEW</span></div>
-        <div class="arcade-game-copy"><div class="arcade-game-meta"><span>부릉부릉, 별을 따라</span><span aria-hidden="true">02</span></div><h2>미니 카트</h2><p>좌우로 쌩쌩, 반짝이는 별을 모아요.<br>나만의 자동차로 결승선까지!</p><div class="arcade-card-bottom"><span class="arcade-control-hint">← 왼쪽 <b>·</b> → 오른쪽</span><span class="arcade-play">달려 보기 <b aria-hidden="true">↗</b></span></div></div>
+        <div class="arcade-game-copy"><div class="arcade-game-meta"><span>부릉부릉, 별을 따라</span><span aria-hidden="true">02</span></div><h2>미니 카트</h2><p>별 15개면 자석이 준비돼요.<br>세 차선의 별을 모아 결승선까지!</p><div class="arcade-card-bottom"><span class="arcade-control-hint">← 왼쪽 <b>·</b> → 오른쪽</span><span class="arcade-play">달려 보기 <b aria-hidden="true">↗</b></span></div></div>
       </a>
       ${MINI_CARDS.map(renderMiniCard).join('')}
     </div>

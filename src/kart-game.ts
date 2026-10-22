@@ -8,7 +8,7 @@ export type { KartProgress, KartResult, KartTheme, KartVehicle, KartDifficulty }
 type KartOptions = { theme: KartTheme; vehicle: KartVehicle; difficulty?: KartDifficulty };
 type Callbacks = {
   update(progress: KartProgress): void;
-  event(kind: 'star' | 'bump' | 'shield' | 'block'): void;
+  event(kind: 'star' | 'bump' | 'shield' | 'block' | 'magnet-ready' | 'magnet'): void;
   end(result: KartResult): void;
 };
 type Palette = {
@@ -113,6 +113,13 @@ export class KartScene extends Phaser.Scene {
     this.session.move(direction);
   }
 
+  useMagnet(): void {
+    if (!this.loaded || this.paused || this.mode !== 'running' || !this.session.useMagnet()) return;
+    this.feedback('별 자석! 5초 동안 3차선의 별을 모아요');
+    this.callbacks.event('magnet');
+    this.callbacks.update(this.session.getProgress());
+  }
+
   setPaused(value: boolean): void { this.paused = value; this.session.setPaused(value); }
 
   idle(options: KartOptions): void {
@@ -142,8 +149,11 @@ export class KartScene extends Phaser.Scene {
         this.callbacks.event(event.kind);
         const position = this.project(event.object.distance - this.session.distance, event.object.lane);
         if (event.kind === 'star') {
-          this.burst(position.x, position.y - 10, 7, false);
-          if (event.shieldEarned) {
+          this.burst(position.x, position.y - 10, 7, false, event.attracted ? 0xa0f2ff : undefined);
+          if (event.magnetEarned) {
+            this.callbacks.event('magnet-ready');
+            this.feedback('별 15개! 별 자석 버튼을 눌러 봐요');
+          } else if (event.shieldEarned) {
             this.callbacks.event('shield');
             this.feedback('별 10개! 방울 보호막 준비!');
           } else if (this.session.stars % 5 === 0) this.feedback(`별 ${this.session.stars}개! 멋지다!`);
@@ -207,6 +217,19 @@ export class KartScene extends Phaser.Scene {
     const player = this.project(0, this.session.lane);
     const bounce = this.reducedMotion || this.paused || this.mode === 'stopped' ? 0 : Math.sin(this.visualTime * .014) * 1.2;
     const bank = this.reducedMotion ? 0 : (this.session.targetLane - this.session.lane) * -.12;
+    if (this.session.magnetActive) {
+      // The band marks the actual contact strip, across all three lanes.
+      const near = this.project(-24, 1).y, far = this.project(24, 1).y;
+      const nearHalf = this.roadHalfWidth(near), farHalf = this.roadHalfWidth(far);
+      polygon(g, [this.width / 2 - nearHalf, near, this.width / 2 + nearHalf, near,
+        this.width / 2 + farHalf, far, this.width / 2 - farHalf, far], 0x87edfa, .45);
+      const pulse = this.reducedMotion || this.paused ? 1 : .86 + Math.sin(this.visualTime * .006) * .14;
+      for (const lane of [0, 1, 2]) {
+        const target = this.project(0, lane);
+        g.lineStyle(2, 0xcaffff, .9); g.strokeEllipse(target.x, target.y, 56 * target.scale * pulse, 20 * target.scale);
+        g.lineStyle(2, 0x9cf6ff, .65); g.lineBetween(target.x, target.y, player.x, player.y - 12);
+      }
+    }
     if (this.session.shield) {
       const shimmer = this.reducedMotion || this.paused ? 1 : .94 + Math.sin(this.visualTime * .003) * .06;
       g.fillStyle(0xa6f2ef, .22); g.fillEllipse(player.x, player.y - 9, 77 * player.scale * shimmer, 99 * player.scale * shimmer);

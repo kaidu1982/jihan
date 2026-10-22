@@ -12,8 +12,11 @@ export type KartProgress = {
   difficulty: KartDifficulty;
   shield: boolean;
   saves: number;
+  magnetCharged: boolean;
+  magnetSeconds: number;
+  magnetStars: number;
 };
-export type KartResult = { stars: number; bumps: number; elapsed: number; difficulty: KartDifficulty; saves: number };
+export type KartResult = { stars: number; bumps: number; elapsed: number; difficulty: KartDifficulty; saves: number; magnetStars: number; magnetUses: number };
 export type KartObject = {
   id: number;
   row: number;
@@ -23,10 +26,11 @@ export type KartObject = {
   resolved: boolean;
 };
 export type KartRow = { distance: number; safeLane: number; obstacleLanes: number[] };
-export type KartEvent = { kind: 'star' | 'bump' | 'block'; object: KartObject; shieldEarned?: boolean };
+export type KartEvent = { kind: 'star' | 'bump' | 'block'; object: KartObject; shieldEarned?: boolean; magnetEarned?: boolean; attracted?: boolean };
 
 export const KART_DURATION_MS = 60_000;
 export const KART_VIEW_DISTANCE = 1_350;
+export const KART_MAGNET_MS = 5_000;
 const LANE_SPEED = 5.2;
 const PHYSICS_STEP_MS = 1000 / 120;
 const CONTACT_DISTANCE = 24;
@@ -74,10 +78,14 @@ export class KartSession {
   bumps = 0;
   shield = false;
   saves = 0;
+  magnetCharged = false;
+  magnetStars = 0;
+  magnetUses = 0;
   paused = false;
   finished = false;
   private slowedUntil = 0;
   private protectedUntil = 0;
+  private magnetUntil = 0;
 
   constructor(seed = 73129, readonly difficulty: KartDifficulty = 'normal') {
     const course = makeKartCourse(seed, difficulty);
@@ -86,6 +94,7 @@ export class KartSession {
   }
 
   get slowed(): boolean { return this.elapsed < this.slowedUntil; }
+  get magnetActive(): boolean { return !this.finished && this.elapsed < this.magnetUntil; }
   get speed(): number { return (174 + 52 * this.elapsed / this.duration) * (this.difficulty === 'easy' ? .74 : 1) * (this.slowed ? .53 : 1); }
 
   move(direction: -1 | 1): void {
@@ -94,6 +103,15 @@ export class KartSession {
   }
 
   setPaused(value: boolean): void { this.paused = value; }
+
+  /** A charged magnet collects stars from all three lanes, never obstacles. */
+  useMagnet(): boolean {
+    if (this.paused || this.finished || !this.magnetCharged || this.magnetActive) return false;
+    this.magnetCharged = false;
+    this.magnetUntil = this.elapsed + KART_MAGNET_MS;
+    this.magnetUses++;
+    return true;
+  }
 
   advance(deltaMs: number): KartEvent[] {
     const events: KartEvent[] = [];
@@ -112,13 +130,17 @@ export class KartSession {
         if (object.resolved || object.distance < previousDistance - CONTACT_DISTANCE) continue;
         if (object.distance > this.distance + CONTACT_DISTANCE) break;
         const touchesLane = Math.abs(this.lane - object.lane) < (object.kind === 'star' ? .47 : .39);
-        if (!touchesLane) continue;
+        const attracted = object.kind === 'star' && this.magnetActive && !touchesLane;
+        if (!touchesLane && !attracted) continue;
         object.resolved = true;
         if (object.kind === 'star') {
           this.stars++;
+          if (attracted) this.magnetStars++;
           const shieldEarned = this.stars % 10 === 0 && !this.shield;
           if (shieldEarned) this.shield = true;
-          events.push({ kind: 'star', object, shieldEarned });
+          const magnetEarned = this.stars % 15 === 0 && !this.magnetCharged;
+          if (magnetEarned) this.magnetCharged = true;
+          events.push({ kind: 'star', object, shieldEarned, magnetEarned, attracted });
         } else if (this.elapsed >= this.protectedUntil) {
           this.protectedUntil = this.elapsed + 900;
           if (this.shield) {
@@ -147,8 +169,10 @@ export class KartSession {
       progress: this.elapsed / this.duration, stars: this.stars, bumps: this.bumps,
       lane: this.lane, slowed: this.slowed,
       difficulty: this.difficulty, shield: this.shield, saves: this.saves,
+      magnetCharged: this.magnetCharged, magnetSeconds: this.magnetActive ? Math.max(0, this.magnetUntil - this.elapsed) / 1000 : 0,
+      magnetStars: this.magnetStars,
     };
   }
 
-  getResult(): KartResult { return { stars: this.stars, bumps: this.bumps, elapsed: this.elapsed / 1000, difficulty: this.difficulty, saves: this.saves }; }
+  getResult(): KartResult { return { stars: this.stars, bumps: this.bumps, elapsed: this.elapsed / 1000, difficulty: this.difficulty, saves: this.saves, magnetStars: this.magnetStars, magnetUses: this.magnetUses }; }
 }

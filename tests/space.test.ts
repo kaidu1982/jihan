@@ -30,7 +30,7 @@ test('space rescue missions are deterministic and each planet has its own route'
 });
 
 test('the visible star trail is a reachable route to every friend on all planets', () => {
-  for (const seed of [1, 7123, 0xffffffff]) {
+  for (const seed of [0, 1, 2, 42, 7123, 104729, 0xffffffff]) {
     for (const level of [0, 1, 2]) {
       const run = new SpaceSession(options(seed, level));
       while (!run.finished) {
@@ -43,13 +43,107 @@ test('the visible star trail is a reachable route to every friend on all planets
       }
       assert.equal(run.bumps, 0);
       assert.equal(run.rescued, 12);
-      assert.equal(run.stars, 24);
+      assert.equal(run.stars, 32);
+      assert.equal(run.combo, 12);
+      assert.equal(run.bestCombo, 12);
+      assert.equal(run.comboBonusStars, 8);
       assert.equal(run.getStatus().won, true);
       assert.equal(run.getStatus().progress, 1);
       assert.equal(run.signalsRemaining, SPACE_SIGNAL_CHARGES);
       assert.ok(run.getStatus().objectives?.every(objective => objective.done));
     }
   }
+});
+
+test('three consecutive rescues include signals and award exactly two team stars once', () => {
+  const run = new SpaceSession(options());
+  const friends = run.objects.filter(object => object.kind === 'friend');
+  for (let index = 0; index < 3; index++) {
+    const friend = friends[index];
+    while (run.targetLane > friend.lane) run.act('left');
+    while (run.targetLane < friend.lane) run.act('right');
+    run.advance(friend.arrivalAt - run.elapsed - 500);
+    if (index === 1) run.act('signal');
+    run.advance(501);
+    assert.equal(run.combo, index + 1);
+  }
+  assert.equal(run.rescued, 3);
+  assert.equal(run.signalledRescues, 1);
+  assert.equal(run.comboBonusStars, 2);
+  assert.equal(run.bestCombo, 3);
+  assert.equal(run.stars, 8);
+  assert.match(run.getStatus().feedback ?? '', /별 \+2/);
+  assert.match(run.getStatus().detail, /3명 연속/);
+  assert.match(run.getStatus().summary, /최고 3명 연속/);
+  const reward = run.stars;
+  run.act('signal'); run.advance(100);
+  assert.equal(run.stars, reward);
+  assert.equal(run.comboBonusStars, 2);
+});
+
+test('missing a friend breaks the team chain while collected stars and the record remain', () => {
+  const run = new SpaceSession(options());
+  const friends = run.objects.filter(object => object.kind === 'friend');
+  // Make a clear test lane independent of the seeded visual route.
+  for (const object of run.objects) {
+    if (object.kind === 'meteor') object.lane = 0;
+    else object.lane = 1;
+  }
+  run.advance(friends[2].arrivalAt + 1);
+  assert.equal(run.combo, 3);
+  assert.equal(run.comboBonusStars, 2);
+  const savedStars = run.stars;
+  friends[3].lane = 0;
+  run.advance(friends[3].arrivalAt - run.elapsed + 1);
+  assert.equal(friends[3].outcome, 'missed');
+  assert.equal(run.combo, 0);
+  assert.equal(run.bestCombo, 3);
+  assert.ok(run.stars >= savedStars);
+  run.advance(friends[6].arrivalAt - run.elapsed + 1);
+  assert.equal(run.combo, 3);
+  assert.equal(run.comboBonusStars, 4);
+  assert.equal(run.bestCombo, 3);
+});
+
+test('a meteor hit breaks a signalled rescue chain, but the earned team bonus is permanent', () => {
+  const run = new SpaceSession(options());
+  for (const object of run.objects) {
+    if (object.kind === 'meteor') object.lane = 0;
+    else object.lane = 1;
+  }
+  const friends = run.objects.filter(object => object.kind === 'friend');
+  run.advance(friends[2].arrivalAt + 1);
+  assert.equal(run.comboBonusStars, 2);
+  run.advance(friends[3].arrivalAt - run.elapsed - 500);
+  run.act('signal');
+  const meteor = run.objects.find(object => object.kind === 'meteor' && object.wave === 3)!;
+  meteor.lane = 1;
+  run.advance(501);
+  assert.equal(run.rescued, 4);
+  assert.equal(run.combo, 0);
+  assert.equal(run.bestCombo, 4);
+  assert.equal(run.bumps, 1);
+  assert.equal(run.comboBonusStars, 2);
+  run.advance(SPACE_DURATION_MS);
+  const record = [run.combo, run.bestCombo, run.comboBonusStars, run.stars, run.rescued];
+  run.act('signal'); run.act('left'); run.advance(100_000);
+  assert.deepEqual([run.combo, run.bestCombo, run.comboBonusStars, run.stars, run.rescued], record);
+});
+
+test('shielded meteor contact also breaks a chain without adding a second impact', () => {
+  const run = new SpaceSession(options());
+  for (const object of run.objects) object.lane = object.kind === 'meteor' ? 0 : 1;
+  const first = run.nextFriend!;
+  const meteor = run.objects.find(object => object.kind === 'meteor' && object.wave === 0)!;
+  meteor.lane = 1;
+  run.shieldUntil = first.arrivalAt + 100;
+  run.advance(first.arrivalAt + 1);
+  assert.equal(run.rescued, 1);
+  assert.equal(meteor.outcome, 'shielded');
+  assert.equal(run.combo, 0);
+  assert.equal(run.bestCombo, 1);
+  assert.equal(run.bumps, 0);
+  assert.equal(run.comboBonusStars, 0);
 });
 
 test('a nearby adjacent-lane friend responds to one real signal and cannot be rescued twice', () => {

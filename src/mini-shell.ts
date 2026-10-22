@@ -74,12 +74,12 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
   const controls = node('div', `mini-controls${hasPad ? ' mini-direction-pad' : ''}`); controls.setAttribute('aria-label', '게임 조작'); gameColumn.append(controls);
   const actionButtons: HTMLButtonElement[] = [];
   for (const control of definition.controls) {
-    const target = node('button', `mini-control mini-control-${control.action}`); target.type = 'button'; target.disabled = true; target.setAttribute('aria-label', control.label);
+    const target = node('button', control.placement === 'toolbar' ? `mini-chip mini-action-${control.action}` : `mini-control mini-control-${control.action}`); target.type = 'button'; target.disabled = true; target.setAttribute('aria-label', control.label);
     target.append(node('span', 'mini-control-icon', control.icon), node('span', '', control.label));
     target.addEventListener('pointerdown', event => { event.preventDefault(); act(control.action); target.classList.add('pressed'); });
     target.addEventListener('click', event => { if (event.detail === 0) act(control.action); });
     for (const type of ['pointerup', 'pointerleave', 'pointercancel', 'blur']) target.addEventListener(type, () => target.classList.remove('pressed'));
-    controls.append(target); actionButtons.push(target);
+    (control.placement === 'toolbar' ? tools : controls).append(target); actionButtons.push(target);
   }
   gameColumn.append(node('p', 'mini-below', '오늘도 내 속도로, 즐겁게 놀아요.'));
   const sidebar = node('aside', 'mini-sidebar'), stageList = node('div', 'mini-stage-list'), collectionList = node('div', 'mini-character-list');
@@ -224,7 +224,7 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
     }
     lastStatus = status;
   }
-  function act(action: MiniAction): void { if (phase !== 'playing') return; if (['hint', 'trail', 'signal'].includes(action)) lastFeedback = ''; session.act(action); sync(); }
+  function act(action: MiniAction): void { if (phase !== 'playing') return; if (['hint', 'trail', 'signal', 'map'].includes(action)) lastFeedback = ''; session.act(action); sync(); }
   form.addEventListener('submit', event => { event.preventDefault(); start(); });
   nameInput.addEventListener('input', () => { nameError.textContent = ''; });
   nameInput.addEventListener('change', () => { if (phase !== 'ready') return; try { normalizeName(nameInput.value); } catch { return; } restorePreferences(); renderChoices(); preview(); });
@@ -234,7 +234,7 @@ export function mountMiniGame(definition: MiniGameDefinition): void {
     if (event.code === 'Escape') { event.preventDefault(); if (!event.repeat) pause(); return; }
     if (event.code === 'Space' && event.target instanceof HTMLElement && event.target.closest('button') && !controls.contains(event.target)) return;
     const control = definition.controls.find(item => item.keys.includes(event.code) || item.keys.includes(event.key));
-    if (control && phase === 'playing') { event.preventDefault(); if (!event.repeat || !['jump', 'signal', 'hint', 'trail'].includes(control.action) && performance.now() - lastKeyAt > 130) { lastKeyAt = performance.now(); act(control.action); } }
+    if (control && phase === 'playing') { event.preventDefault(); if (!event.repeat || !['jump', 'signal', 'hint', 'trail', 'map'].includes(control.action) && performance.now() - lastKeyAt > 130) { lastKeyAt = performance.now(); act(control.action); } }
   });
   let pointer: { id: number; x: number; y: number } | undefined;
   canvas.addEventListener('pointerdown', event => { if (phase !== 'playing') return; pointer = { id: event.pointerId, x: event.clientX, y: event.clientY }; canvas.setPointerCapture(event.pointerId); });

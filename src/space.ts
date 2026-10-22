@@ -1,5 +1,5 @@
 import type { MiniFrame, MiniGameDefinition } from './mini-types';
-import { SPACE_LOOKAHEAD_MS, SpaceSession } from './space-session';
+import { SPACE_COMBO_SIZE, SPACE_LOOKAHEAD_MS, SpaceSession } from './space-session';
 
 const palettes = [
   { top: '#131d55', bottom: '#493275', glow: '#7ae6e4', planet: '#8ed6c8', ring: '#d8f6d1', name: '민트 행성' },
@@ -141,6 +141,20 @@ function draw(context: CanvasRenderingContext2D, session: SpaceSession, frame: M
   circle(context, 25, -20, 10, '#ffffff20'); context.restore();
   context.beginPath(); context.ellipse(0, 0, 75, 19, 0, 0, Math.PI); context.strokeStyle = theme.ring; context.lineWidth = 7; context.stroke(); context.restore();
   circle(context, 47, 192, 17, '#8e91c855'); circle(context, 42, 187, 4, '#626b9b77');
+  // A linked group of three lights makes the next team bonus visible before it is earned.
+  context.beginPath(); context.roundRect(18, 116, 199, 53, 15); context.fillStyle = '#15214bba'; context.fill();
+  context.textAlign = 'left'; context.fillStyle = '#eef6ff'; context.font = '700 12px system-ui, sans-serif';
+  context.fillText(`${session.combo}명 연속 구조 · 최고 ${session.bestCombo}명`, 30, 135);
+  const comboLights = session.combo > 0 && session.combo % SPACE_COMBO_SIZE === 0 ? SPACE_COMBO_SIZE : session.combo % SPACE_COMBO_SIZE;
+  for (let light = 0; light < SPACE_COMBO_SIZE; light++) {
+    const x = 39 + light * 25;
+    if (light < SPACE_COMBO_SIZE - 1) {
+      context.beginPath(); context.moveTo(x + 5, 153); context.lineTo(x + 20, 153);
+      context.strokeStyle = light + 1 < comboLights ? '#ffe6a5' : '#7583a6'; context.lineWidth = 2; context.stroke();
+    }
+    star(context, x, 153, 7, light < comboLights ? '#ffe6a5' : '#7583a6');
+  }
+  context.font = '600 10px system-ui, sans-serif'; context.fillStyle = '#d4e4ff'; context.fillText('3명마다 별 +2', 111, 157);
 
   // Subtle flight beacons indicate the three reachable columns, without a road.
   for (const x of [100, 210, 320]) {
@@ -200,6 +214,11 @@ function draw(context: CanvasRenderingContext2D, session: SpaceSession, frame: M
   context.save(); context.translate(shipX, 430);
   const tilt = reducedMotion ? 0 : (session.targetLane - session.lane) * .18;
   context.rotate(tilt); ship(context, session.character, time, reducedMotion, session.shielded); context.restore();
+  if (time < session.comboBonusUntil) {
+    const lift = reducedMotion ? 0 : (1 - (session.comboBonusUntil - time) / 1500) * 25;
+    context.textAlign = 'center'; context.font = '800 17px system-ui, sans-serif'; context.fillStyle = '#ffe6a5';
+    context.fillText('함께해서 ★ +2!', shipX, 370 - lift);
+  }
   // Three lit beacons match the three available rescue signals.
   context.beginPath(); context.roundRect(18, 508, 166, 39, 16); context.fillStyle = '#17234dbb'; context.fill();
   context.textAlign = 'left'; context.fillStyle = '#edf7ff'; context.font = '700 12px system-ui, sans-serif';
@@ -230,14 +249,14 @@ const space: MiniGameDefinition = {
   icon: '🚀',
   kicker: '친구를 찾아 떠나는 여행',
   tagline: '반짝이는 별길 끝에 누가 있을까?',
-  description: '별길을 따라 동물 친구들을 데려와요. 가까운 옆길의 친구에게 구조 신호를 보내고 우주 정거장으로 출발!',
+  description: '별길에서 동물 친구를 연속으로 구조해요. 세 명을 이어 데려오면 보너스 별! 가까운 옆길의 친구에게 구조 신호도 보내요.',
   accent: '#8388dd',
   startLabel: '우주로 출발',
   scoreUnit: '명 구조',
   instructions: [
     { icon: '↔️', title: '좌우로 슝!', copy: '왼쪽·오른쪽 버튼이나 방향키로 우주선을 움직여요.' },
     { icon: '📡', title: '구조 신호는 세 번!', copy: '가까운 옆길 친구는 구조 신호 버튼이나 스페이스 키로 데려와요. 친구가 없으면 횟수를 쓰지 않아요.' },
-    { icon: '🐰', title: '친구와 끝까지 탐험', copy: '별길에서 친구를 만나요. 운석에 닿아도 계속 출발! 54초 뒤 도착하고, 6명·10명 구조 메달에 도전해요.' },
+    { icon: '🐰', title: '친구를 이어 보너스 별!', copy: '3명 연속 구조마다 별 2개! 친구를 놓치거나 운석에 부딪히면 다시 이어 보아요. 54초 뒤 도착해요.' },
   ],
   controls: [
     { action: 'left', label: '왼쪽', icon: '←', keys: ['ArrowLeft', 'a', 'A'] },

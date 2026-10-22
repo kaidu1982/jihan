@@ -45,7 +45,7 @@ test('both drives have a reachable star route, pause without advancing, and fini
         run.advance(16);
       }
       assert.equal(run.bumps, 0); assert.ok(run.stars >= 40);
-      assert.deepEqual(run.getResult(), { stars: run.stars, bumps: 0, elapsed: 60, difficulty, saves: 0 });
+      assert.deepEqual(run.getResult(), { stars: run.stars, bumps: 0, elapsed: 60, difficulty, saves: 0, magnetStars: 0, magnetUses: 0 });
       const result = run.getResult(); assert.deepEqual(run.advance(60_000), []); assert.deepEqual(run.getResult(), result);
     }
   }

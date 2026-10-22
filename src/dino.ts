@@ -78,13 +78,13 @@ const definition: MiniGameDefinition = {
   instructions: [
     { icon: '👆', title: '한 번, 두 번 폴짝!', copy: '바위 앞에서 점프! 공중에서 한 번 더 누르면 더 높이 뛰어요. 땅에 내려오면 다시 두 번!' },
     { icon: '🥚', title: '공룡 알을 찾아요', copy: '점프해서 알을 모아요. 모은 알은 새 공룡을 만나는 별이 돼요.' },
-    { icon: '🏁', title: '천천히 해도 괜찮아', copy: '부딪혀도 다시 달릴 수 있어요. 약 50초 뒤 결승선에서 만나요!' },
+    { icon: '🏁', title: '코스마다 새로운 모험', copy: '첫 숲은 작은 장애물, 계곡과 얼음 숲은 두 번 점프! 부딪혀도 괜찮아. 약 50~60초면 도착해요.' },
   ],
   controls: [{ action: 'jump', label: '점프 · 한 번 더!', icon: '↑', keys: ['Space', 'ArrowUp', 'KeyW'] }],
   stages: [
-    { name: '초록 화석 숲', icon: '🌿', copy: '커다란 나무와 싱그러운 풀밭' },
-    { name: '노을 공룡 계곡', icon: '🌅', copy: '따뜻한 노을 아래 알 찾기' },
-    { name: '반짝 얼음 숲', icon: '❄️', copy: '눈송이처럼 반짝이는 푸른 숲' },
+    { name: '초록 화석 숲', icon: '🌿', copy: '작은 바위를 한 번 폴짝! 약 50초' },
+    { name: '노을 공룡 계곡', icon: '🌅', copy: '높은 통나무 위로 두 번 폴짝! 약 55초' },
+    { name: '반짝 얼음 숲', icon: '❄️', copy: '더 높은 바위와 넓은 구덩이! 약 60초' },
   ],
   characters: [
     { id: 'sprout', name: '초록이', icon: '🦖', cost: 0 },
@@ -170,12 +170,13 @@ const definition: MiniGameDefinition = {
       for (let row = 0; row < 3; row++) for (let col = 0; col < 7; col++) if ((row + col) % 2 === 0) { ctx.fillStyle = '#476f5b'; ctx.fillRect(finishX + 6 + col * 14, ground - 160 + row * 14, 14, 14); }
       ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#356345'; ctx.fillText('도착!', finishX + 50, ground - 177);
     }
-    const next = session.nextObstacle;
-    if (next && next.x - session.distance < 270 && next.x - session.distance > 12 && !session.finished) {
+    const next = session.nextObstacle, cue = session.jumpCue;
+    if (next && cue) {
       const x = Math.min(355, 86 + next.x - session.distance);
-      round(ctx, x - 30, ground - 123, 60, 28, 14, '#fffdf0');
-      ctx.fillStyle = '#386e4b'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(next.x - session.distance > 110 ? '준비!' : '↑ 점프!', x, ground - 104);
-      ctx.fillStyle = '#fffdf0'; ctx.beginPath(); ctx.moveTo(x - 4, ground - 96); ctx.lineTo(x + 4, ground - 96); ctx.lineTo(x, ground - 90); ctx.fill();
+      const hintY = ground - Math.max(123, next.height + 44);
+      round(ctx, x - 54, hintY, 108, 28, 14, cue.shouldJump ? '#fff4bf' : '#fffdf0');
+      ctx.fillStyle = '#386e4b'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(cue.text, x, hintY + 19);
+      ctx.fillStyle = '#fffdf0'; ctx.beginPath(); ctx.moveTo(x - 4, hintY + 27); ctx.lineTo(x + 4, hintY + 27); ctx.lineTo(x, hintY + 33); ctx.fill();
     }
     dinosaur(ctx, session, 86, ground);
     if (session.elapsed < session.jumpBurstUntil) {

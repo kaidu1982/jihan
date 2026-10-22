@@ -77,10 +77,10 @@ intro.append(el('p', 'kart-intro-copy', '작은 자동차로 떠나는 1분 여�
 const infoTag = el('div', 'kart-info-tag'); infoTag.append(el('span', '', '🏁'), el('div', '', ''));
 infoTag.lastElementChild!.append(el('strong', '', '미니 카트'), el('small', '', '한 판 60초 · 좌우로 움직여요')); intro.append(infoTag);
 const how = el('div', 'kart-how'); how.append(el('h2', '', '이렇게 달려요'));
-[['↔', '왼쪽, 오른쪽!', '큰 화살표 버튼으로 길을 바꿔요.'], ['★', '별 10개면 보호막!', '방울이 장애물을 한 번 막아줘요.'], ['♥', '부딪혀도 괜찮아', '잠깐 느려져도 끝까지 갈 수 있어요.']].forEach(([symbol, name, detail]) => {
+[['↔', '왼쪽, 오른쪽!', '큰 화살표 버튼으로 길을 바꿔요.'], ['★', '별 10개면 보호막!', '방울이 장애물을 한 번 막아줘요.'], ['🧲', '별 15개면 자석 충전!', '버튼을 누르면 5초 동안 3차선의 별을 모아요.'], ['♥', '부딪혀도 괜찮아', '잠깐 느려져도 끝까지 갈 수 있어요.']].forEach(([symbol, name, detail]) => {
   const row = el('div', 'kart-how-row'); const copy = el('p'); copy.append(el('strong', '', name), el('span', '', detail)); row.append(el('span', 'kart-how-icon', symbol), copy); how.append(row);
 });
-intro.append(how, el('p', 'kart-keyboard-note', '키보드는 ← → 또는 A D · 화면을 밀어도 돼요'));
+intro.append(how, el('p', 'kart-keyboard-note', '← → 또는 A D · 별 자석은 Space · 화면 밀기도 돼요'));
 main.append(intro);
 const gameColumn = el('section', 'kart-game-column'); gameColumn.setAttribute('aria-label', '미니 카트 레이싱'); main.append(gameColumn);
 const mobileTitle = el('div', 'kart-mobile-title'); mobileTitle.append(el('div', '', ''));
@@ -96,7 +96,7 @@ const timeLeft = el('strong', 'kart-time', '60'); const timerWrap = el('span', '
 const pauseButton = button('Ⅱ', 'kart-pause', () => pauseRun()); pauseButton.setAttribute('aria-label', '잠깐 쉬기'); pauseButton.disabled = true;
 hudTop.append(starCount, timerWrap, pauseButton); hud.append(hudTop);
 const progressRow = el('div', 'kart-progress-row'); const raceProgress = el('progress', 'kart-progress'); raceProgress.max = 1; raceProgress.value = 0; raceProgress.setAttribute('aria-label', '결승선까지 달린 거리'); progressRow.append(el('span', '', '출발'), raceProgress, el('span', '', '🏁')); hud.append(progressRow); shell.append(hud);
-const driveStatus = el('div', 'kart-drive-status'); const difficultyStatus = el('span', 'kart-difficulty-status'); const shieldStatus = el('span', 'kart-shield-status'); shieldStatus.setAttribute('aria-label', '별 10개를 모으면 보호막'); driveStatus.append(difficultyStatus, shieldStatus); hud.append(driveStatus);
+const driveStatus = el('div', 'kart-drive-status'); const difficultyStatus = el('span', 'kart-difficulty-status'); const shieldStatus = el('span', 'kart-shield-status'); shieldStatus.setAttribute('aria-label', '별 10개를 모으면 보호막'); const magnetStatus = el('span', 'kart-magnet-status'); driveStatus.append(difficultyStatus, shieldStatus, magnetStatus); hud.append(driveStatus);
 const gentleMessage = el('p', 'kart-gentle-message'); gentleMessage.hidden = true; shell.append(gentleMessage);
 const readyOverlay = el('div', 'kart-overlay kart-ready-overlay');
 const readyCard = el('form', 'kart-ready-card'); readyCard.noValidate = true; const readyKicker = el('p', 'kart-card-kicker', 'READY, LITTLE DRIVER?');
@@ -120,7 +120,7 @@ for (const [difficulty, symbol, titleText, detail] of [
 }
 const readyDescription = el('p', 'kart-ready-description');
 const startButton = el('button', 'kart-primary', '불러오는 중…'); startButton.type = 'submit'; startButton.disabled = true;
-const readyFootnote = el('p', 'kart-ready-footnote', '별 10개마다 방울 보호막! 한 번에 1개씩 준비해요.');
+const readyFootnote = el('p', 'kart-ready-footnote', '별 10개마다 보호막 · 15개마다 별 자석 충전!\n자석은 5초 동안 3차선의 별을 모아요. 둘 다 최대 1개.');
 readyCard.append(nameLabel, nameError, difficultyPicker, readyDescription, startButton, readyFootnote); readyOverlay.append(readyCard); shell.append(readyOverlay);
 const pauseOverlay = el('div', 'kart-overlay kart-pause-overlay'); pauseOverlay.hidden = true;
 const pauseCard = el('div', 'kart-modal-card'); pauseCard.setAttribute('role', 'dialog'); pauseCard.setAttribute('aria-modal', 'true'); pauseCard.setAttribute('aria-labelledby', 'kart-pause-heading');
@@ -138,7 +138,10 @@ resultCard.append(el('div', 'kart-finish-medal', '🏁'), finishHeading, finishN
 const controls = el('div', 'kart-controls');
 const leftButton = button('', 'kart-drive-button kart-drive-left', () => move(-1)); leftButton.setAttribute('aria-label', '왼쪽 차선으로 이동'); leftButton.append(el('span', 'kart-arrow', '←'), el('span', '', '왼쪽'));
 const rightButton = button('', 'kart-drive-button kart-drive-right', () => move(1)); rightButton.setAttribute('aria-label', '오른쪽 차선으로 이동'); rightButton.append(el('span', '', '오른쪽'), el('span', 'kart-arrow', '→'));
-leftButton.disabled = rightButton.disabled = true; controls.append(leftButton, rightButton); gameColumn.append(controls);
+const magnetButton = button('', 'kart-drive-button kart-magnet-button', () => useMagnet()); magnetButton.setAttribute('aria-label', '별 자석, 별 15개를 모으면 사용할 수 있어요');
+const magnetButtonState = el('small', 'kart-magnet-button-state', '별 15개 더');
+magnetButton.append(el('span', 'kart-magnet-icon', '🧲'), el('span', '', '별 자석'), magnetButtonState);
+leftButton.disabled = rightButton.disabled = magnetButton.disabled = true; controls.append(leftButton, magnetButton, rightButton); gameColumn.append(controls);
 gameColumn.append(el('p', 'kart-below-game', '별을 모으고, 바람을 느끼고. 오늘도 즐거운 드라이브!'));
 const sidebar = el('aside', 'kart-sidebar'); main.append(sidebar);
 const coursePanel = el('div', 'kart-side-panel'); coursePanel.append(el('p', 'kart-eyebrow', 'PICK YOUR ADVENTURE'), el('h2', '', '어디로 떠날까?'));
@@ -176,7 +179,7 @@ let runProfileId = profileId;
 let lastProgress: KartProgress | undefined;
 let lastSeconds = -1;
 let messageTimeout: ReturnType<typeof setTimeout> | undefined;
-function setDriving(enabled: boolean): void { leftButton.disabled = rightButton.disabled = !enabled; pauseButton.disabled = !enabled; courseOpen.disabled = garageOpen.disabled = phase === 'playing' || phase === 'paused'; for (const choice of difficultyButtons) choice.button.disabled = phase === 'playing' || phase === 'paused'; shell.dataset.phase = phase; }
+function setDriving(enabled: boolean): void { leftButton.disabled = rightButton.disabled = !enabled; magnetButton.disabled = !enabled || !lastProgress?.magnetCharged || lastProgress.magnetSeconds > 0; pauseButton.disabled = !enabled; courseOpen.disabled = garageOpen.disabled = phase === 'playing' || phase === 'paused'; for (const choice of difficultyButtons) choice.button.disabled = phase === 'playing' || phase === 'paused'; shell.dataset.phase = phase; }
 function renderCourseChoices(parent: HTMLElement, closeOnChoice: boolean): void {
   parent.replaceChildren();
   for (const course of COURSES) {
@@ -212,6 +215,9 @@ function renderChoices(): void {
     difficultyStatus.textContent = difficultyName(data.difficulty);
     shieldStatus.textContent = '🫧 별 10개면 보호막'; shieldStatus.dataset.ready = 'false';
     shieldStatus.setAttribute('aria-label', '별 10개를 모으면 보호막');
+    magnetStatus.textContent = '🧲 별 15개면 충전'; magnetStatus.dataset.active = 'false'; magnetStatus.dataset.ready = 'false';
+    magnetButtonState.textContent = '별 15개 더'; magnetButton.dataset.ready = 'false'; magnetButton.dataset.active = 'false'; magnetButton.disabled = true;
+    magnetButton.setAttribute('aria-label', '별 자석, 별 15개를 모으면 사용할 수 있어요');
   }
 }
 function update(progress: KartProgress): void {
@@ -222,14 +228,22 @@ function update(progress: KartProgress): void {
   shieldStatus.textContent = progress.shield ? '🫧 보호막 준비!' : `🫧 별 ${10 - progress.stars % 10}개 더`;
   shieldStatus.dataset.ready = String(progress.shield);
   shieldStatus.setAttribute('aria-label', progress.shield ? '보호막 준비 완료. 장애물을 한 번 막아줘요.' : `별 ${10 - progress.stars % 10}개를 더 모으면 보호막`);
+  const magnetActive = progress.magnetSeconds > 0;
+  const magnetSeconds = Math.ceil(progress.magnetSeconds);
+  magnetStatus.textContent = magnetActive ? `🧲 3차선 · ${magnetSeconds}초` : progress.magnetCharged ? '🧲 자석 준비!' : `🧲 별 ${15 - progress.stars % 15}개 더`;
+  magnetStatus.dataset.active = String(magnetActive); magnetStatus.dataset.ready = String(progress.magnetCharged);
+  magnetButtonState.textContent = magnetActive ? `${magnetSeconds}초 · ${progress.magnetCharged ? '다음 1개' : '3차선'}` : progress.magnetCharged ? '눌러 봐! · Space' : `별 ${15 - progress.stars % 15}개 더`;
+  magnetButton.dataset.active = String(magnetActive); magnetButton.dataset.ready = String(progress.magnetCharged);
+  magnetButton.disabled = !progress.magnetCharged || magnetActive;
+  magnetButton.setAttribute('aria-label', magnetActive ? `별 자석 사용 중, ${magnetSeconds}초 동안 모든 3차선의 별을 모아요${progress.magnetCharged ? '. 다음 자석도 충전됐어요' : ''}` : progress.magnetCharged ? '별 자석 사용, 5초 동안 모든 3차선의 별을 모아요' : `별 자석, 별 ${15 - progress.stars % 15}개를 더 모으면 사용할 수 있어요`);
   if (progress.stars >= 10 && starCount.dataset.goal !== 'done') { starCount.dataset.goal = 'done'; live.textContent = '별 10개 모으기 성공! 방울 보호막이 생겼어요.'; }
 }
-function event(kind: 'star' | 'bump' | 'shield' | 'block'): void {
+function event(kind: 'star' | 'bump' | 'shield' | 'block' | 'magnet-ready' | 'magnet'): void {
   if (phase !== 'playing') return;
   if (kind === 'star') audio.tone('step', lastProgress?.stars || 0);
   else {
-    audio.tone(kind === 'shield' || kind === 'block' ? 'record' : 'turn');
-    gentleMessage.textContent = kind === 'shield' ? '🫧 별 10개! 보호막이 생겼어!' : kind === 'block' ? '🫧 톡! 보호막이 지켜줬어!' : '괜찮아! 잠깐 쉬고 다시 씽씽';
+    audio.tone(kind === 'bump' ? 'turn' : 'record');
+    gentleMessage.textContent = kind === 'magnet-ready' ? '🧲 별 자석 충전! 자석 버튼을 눌러 봐!' : kind === 'magnet' ? '🧲 5초 동안 3차선의 별을 모아요!' : kind === 'shield' ? '🫧 별 10개! 보호막이 생겼어!' : kind === 'block' ? '🫧 톡! 보호막이 지켜줬어!' : '괜찮아! 잠깐 쉬고 다시 씽씽';
     gentleMessage.hidden = false; live.textContent = gentleMessage.textContent;
     clearTimeout(messageTimeout); messageTimeout = setTimeout(() => { gentleMessage.hidden = true; }, 1800);
   }
@@ -240,6 +254,7 @@ function finish(result: KartResult): void {
   const stars = count(result.stars, 10000); const data = store.records[runProfileId] ||= freshRecord(); data.wallet += stars; data.totalStars += stars; data.runs += 1; data.bestStars = Math.max(data.bestStars, stars); const stored = storeRecord();
   finishName.textContent = `${nameInput.value.trim()} · ${difficultyName(result.difficulty)} · 60초 완주`; finishStars.textContent = `★ ${stars}`; finishGoals.replaceChildren();
   [[true, '끝까지 완주했어요'], [stars >= 10, '별 10개를 모아요'], [result.bumps === 0, '덜컹 없이 도착해요'], [result.saves > 0, `보호막이 ${result.saves}번 지켜줬어요`]].forEach(([achieved, text]) => { const goal = el('p', achieved ? 'achieved' : ''); goal.append(el('span', '', achieved ? '✓' : '○'), document.createTextNode(String(text))); finishGoals.append(goal); });
+  const magnetResult = el('p', 'kart-magnet-result', `🧲 자석으로 더 모은 별 ${result.magnetStars}개 · ${result.magnetUses}번 사용`); finishGoals.append(magnetResult);
   finishSave.textContent = stored ? `별 ${stars}개가 차고에 쏙! 지금까지 ${data.wallet}개 모았어요.` : `별 ${stars}개를 모았어요. 저장 공간이 없어 지금 창에서만 기억해요.`;
   resultOverlay.hidden = false; renderChoices(); live.textContent = `멋지게 도착! 별 ${stars}개를 모았어요.`; retryButton.focus();
 }
@@ -272,6 +287,7 @@ function resetReady(): void {
   audio.stop(); scene?.stop(); phase = 'ready'; awarded = false; readyOverlay.hidden = false; pauseOverlay.hidden = resultOverlay.hidden = true; gentleMessage.hidden = true; clearTimeout(messageTimeout); setDriving(false); timeLeft.textContent = '60'; starCount.textContent = '★ 0'; raceProgress.value = 0; renderChoices(); scene?.idle({ theme: record().theme, vehicle: record().vehicle, difficulty: record().difficulty }); startButton.focus({ preventScroll: true });
 }
 function move(direction: -1 | 1): void { if (phase === 'playing') scene?.move(direction); }
+function useMagnet(): void { if (phase === 'playing') scene?.useMagnet(); }
 readyCard.addEventListener('submit', submit => { submit.preventDefault(); startRun(); });
 nameInput.addEventListener('input', () => { nameError.textContent = ''; });
 nameInput.addEventListener('change', () => {
@@ -292,13 +308,18 @@ document.addEventListener('keydown', key => {
   const target = key.target as HTMLElement; if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable) return;
   if (key.code === 'Escape') { key.preventDefault(); if (key.repeat) return; if (phase === 'playing') pauseRun(); else if (phase === 'paused') resumeRun(); return; }
   if (phase !== 'playing') return;
+  if (key.code === 'Space') {
+    // Keep Space usable for focused pause/setup buttons through native keyboard activation.
+    if (target instanceof HTMLButtonElement && !controls.contains(target)) return;
+    key.preventDefault(); if (!key.repeat) useMagnet(); return;
+  }
   if (['ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD'].includes(key.code)) { key.preventDefault(); if (!key.repeat) move(key.code === 'ArrowLeft' || key.code === 'KeyA' ? -1 : 1); }
 });
 let swipeStart: { x: number; y: number; id: number } | undefined;
 canvasParent.addEventListener('pointerdown', pointer => { if (phase !== 'playing') return; swipeStart = { x: pointer.clientX, y: pointer.clientY, id: pointer.pointerId }; canvasParent.setPointerCapture(pointer.pointerId); });
 canvasParent.addEventListener('pointerup', pointer => { if (!swipeStart || swipeStart.id !== pointer.pointerId) return; const dx = pointer.clientX - swipeStart.x; const dy = pointer.clientY - swipeStart.y; swipeStart = undefined; if (Math.abs(dx) > 22 && Math.abs(dx) > Math.abs(dy)) move(dx < 0 ? -1 : 1); });
 canvasParent.addEventListener('pointercancel', () => { swipeStart = undefined; });
-for (const control of [leftButton, rightButton]) { control.addEventListener('pointerdown', () => control.classList.add('pressed')); ['pointerup', 'pointercancel', 'pointerleave', 'blur'].forEach(kind => control.addEventListener(kind, () => control.classList.remove('pressed'))); }
+for (const control of [leftButton, magnetButton, rightButton]) { control.addEventListener('pointerdown', () => control.classList.add('pressed')); ['pointerup', 'pointercancel', 'pointerleave', 'blur'].forEach(kind => control.addEventListener(kind, () => control.classList.remove('pressed'))); }
 window.addEventListener('blur', () => pauseRun()); document.addEventListener('visibilitychange', () => { if (document.hidden) pauseRun(); }); window.addEventListener('pagehide', () => { pauseRun(); audio.pause(); });
 renderChoices();
 void createKartGame(canvasParent, { update, event, end: finish }).then(result => { scene = result.scene; scene.idle({ theme: record().theme, vehicle: record().vehicle, difficulty: record().difficulty }); startButton.disabled = false; startButton.textContent = '씽씽! 출발하기 →'; }).catch(() => { startButton.textContent = '게임을 다시 불러와요'; startButton.disabled = false; startButton.type = 'button'; startButton.addEventListener('click', () => window.location.reload()); readyFootnote.textContent = '게임을 불러오지 못했어요. 버튼을 눌러 다시 시작해요.'; });
