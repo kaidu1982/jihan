@@ -7,6 +7,7 @@ import { ADVENTURE_STAGES, ACHIEVEMENTS, worldById, type GameMode } from './cont
 import { ProgressStore, createProgressRunId, dailySeed, seoulDateKey } from './progression';
 import { JourneyBook } from './journey';
 import { deleteKartProgress } from './kart-storage';
+import { deleteMiniProgress } from './mini-storage';
 
 document.body.classList.add('stairs-page');
 document.title = '지한이의 무한계단 · 작은 오락실';
@@ -377,6 +378,7 @@ $('#delete-profile').addEventListener('click', async () => {
     await api.remove(profile.id);
     if (!progressStore.deleteProfileProgress(profile.id)) throw new Error('서버 기록은 지웠지만 기기의 모험 기록을 지우지 못했어요. 브라우저 저장 공간을 확인하고 다시 시도해 주세요.');
     if (!deleteKartProgress(profile.id, profile.name)) throw new Error('기기의 미니 카트 기록을 지우지 못했어요. 브라우저 저장 공간을 확인하고 다시 시도해 주세요.');
+    if (!deleteMiniProgress(profile.name)) throw new Error('기기의 미니 모험 기록을 지우지 못했어요. 브라우저 저장 공간을 확인하고 다시 시도해 주세요.');
     const previousProfiles = saved.profiles, previousId = saved.activeId;
     saved.profiles = saved.profiles.filter(p => p.id !== profile.id); saved.activeId = saved.profiles[0]?.id || '';
     if (!persist()) {

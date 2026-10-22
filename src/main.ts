@@ -1,12 +1,18 @@
 import './style.css';
 import './arcade.css';
+import type { MiniGameDefinition } from './mini-types';
 
 const selection = new URLSearchParams(window.location.search).get('game');
+const miniGames: Record<string, () => Promise<{ default: MiniGameDefinition }>> = {
+  dino: () => import('./dino'),
+};
 const load = selection === 'stairs'
   ? import('./stairs')
   : selection === 'kart'
     ? import('./kart')
-    : import('./arcade');
+    : selection && Object.hasOwn(miniGames, selection)
+      ? Promise.all([import('./mini-shell'), miniGames[selection]()]).then(([shell, game]) => shell.mountMiniGame(game.default))
+      : import('./arcade');
 
 void load.catch(error => {
   console.error('Game could not load', error);

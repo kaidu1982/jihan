@@ -10,3 +10,6 @@
 @media(prefers-reduced-motion:reduce){.arcade-game{transition:none}.arcade-game:hover{transform:none}}
 
 @media(max-width:720px){.stairs-page .site-header{padding-inline:12px;margin-inline:0}.stairs-page .brand{gap:5px}.stairs-page .brand>span:last-child{font-size:0}.stairs-page .brand strong{font-size:11px}.stairs-page .arcade-return{padding:8px}.stairs-page .arcade-return span{display:none}.stairs-page .profile-button{max-width:82px}}
+
+.arcade-game-extra h2{color:var(--card-accent)}.arcade-game-extra .arcade-play{color:var(--card-accent)}.arcade-game-extra .arcade-play b{background:#eef2df}
+@media(min-width:1050px){.arcade-main{max-width:1210px}.arcade-games{grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}.arcade-art{height:205px}.arcade-stair-boy{height:155px;width:155px;top:30px;left:calc(50% - 80px)}.arcade-game-copy{padding:22px}.arcade-game h2{font-size:27px}.arcade-control-hint{font-size:8px}.arcade-play{font-size:11px}.arcade-play b{margin-left:3px}.arcade-footer{max-width:1146px}}

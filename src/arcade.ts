@@ -1,4 +1,5 @@
 import { activeProfile } from './storage';
+import { MINI_CARDS, renderMiniCard } from './mini-catalog';
 
 document.body.classList.add('arcade-page');
 document.title = '지한이의 작은 오락실 · 오늘은 어떤 모험을 할까?';
@@ -31,7 +32,7 @@ const kartArt = `<svg viewBox="0 0 520 280" aria-hidden="true" class="arcade-ill
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="site-header arcade-header">
     <a class="brand" href="/" aria-label="지한이의 작은 오락실 처음으로"><span class="brand-mark" aria-hidden="true">✦</span><span>지한이의 <strong>작은 오락실</strong></span></a>
-    <span class="arcade-header-note">작은 손으로, 커다란 모험</span>
+    <span class="arcade-header-note">${MINI_CARDS.length + 2}가지 놀이 · 작은 손으로, 커다란 모험</span>
   </header>
   <main class="arcade-main">
     <div class="arcade-welcome"><span class="arcade-kicker">HELLO, LITTLE ADVENTURER!</span><h1>오늘은 어떤 <span>모험</span>을 할까?<i aria-hidden="true">✦</i></h1><p id="arcade-greeting">올라가도 좋고, 달려도 좋아.<br class="arcade-mobile-break"> 마음이 가는 게임을 골라봐!</p></div>
@@ -44,6 +45,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <div class="arcade-art">${kartArt}<span class="arcade-art-tag">🏁 1분 드라이브</span><span class="arcade-new">NEW</span></div>
         <div class="arcade-game-copy"><div class="arcade-game-meta"><span>부릉부릉, 별을 따라</span><span aria-hidden="true">02</span></div><h2>미니 카트</h2><p>좌우로 쌩쌩, 반짝이는 별을 모아요.<br>나만의 자동차로 결승선까지!</p><div class="arcade-card-bottom"><span class="arcade-control-hint">← 왼쪽 <b>·</b> → 오른쪽</span><span class="arcade-play">달려 보기 <b aria-hidden="true">↗</b></span></div></div>
       </a>
+      ${MINI_CARDS.map(renderMiniCard).join('')}
     </div>
     <div class="arcade-bottom-note"><span aria-hidden="true">✦</span><p>천천히 익혀도 괜찮아.<br class="arcade-mobile-break"> 오늘도 내 속도로 신나게 놀아요.</p></div>
   </main>
