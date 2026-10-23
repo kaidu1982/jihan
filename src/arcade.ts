@@ -54,3 +54,18 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
 const name = activeProfile()?.name;
 if (name) document.querySelector('#arcade-greeting')!.textContent = `${name}, 반가워! 올라가도 좋고, 달려도 좋아. 마음이 가는 게임을 골라봐!`;
+
+const quickPick = document.createElement('nav');
+quickPick.className = 'arcade-quick-pick';
+quickPick.setAttribute('aria-label', '여섯 게임 바로 고르기');
+for (const [id, icon, title] of [
+  ['stairs', '🪜', '무한계단'], ['kart', '🏎️', '미니 카트'], ['dino', '🦖', '공룡 달리기'],
+  ['space', '🚀', '우주 탐험'], ['maze', '🗝️', '보물 미로'], ['crossing', '🐥', '길 건너기'],
+]) {
+  const choice = document.createElement('a');
+  choice.href = `/?game=${id}`; choice.setAttribute('aria-label', `${title} 바로 시작`);
+  const symbol = document.createElement('span'); symbol.textContent = icon; symbol.setAttribute('aria-hidden', 'true');
+  const label = document.createElement('strong'); label.textContent = title;
+  choice.append(symbol, label); quickPick.append(choice);
+}
+document.querySelector('.arcade-welcome')!.after(quickPick);

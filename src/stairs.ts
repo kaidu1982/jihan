@@ -73,6 +73,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 `;
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
+$('#start-button').insertAdjacentHTML('afterend', '<a class="stairs-other-games" href="/" aria-label="다른 게임 고르기: 미니 카트, 공룡 달리기, 우주 탐험, 보물 미로, 길 건너기"><strong>🎮 다른 게임 고르기</strong><span>카트 · 공룡 · 우주 · 미로 · 길 건너기 →</span></a>');
 $('#mode-description').insertAdjacentHTML('afterend', `<fieldset id="practice-goals" class="stairs-practice-goals" hidden><legend>오늘은 어디까지 올라갈까요?</legend><div>${PRACTICE_GOALS.map(goal => `<button type="button" data-practice-goal="${goal}" aria-pressed="false">${practiceGoalLabel(goal)}</button>`).join('')}</div></fieldset>`);
 $('#step-hint').insertAdjacentHTML('afterend', '<div id="practice-progress" class="stairs-practice-progress" role="progressbar" aria-label="연습 목표" aria-valuemin="0" hidden><div id="practice-progress-fill"></div><span id="practice-progress-copy"></span></div>');
 let scene: StairScene;
